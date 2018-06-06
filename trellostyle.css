@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css?family=PT+Sans+Narrow');
+@import url('https://fonts.googleapis.com/css?family=Inconsolata|PT+Sans+Narrow');
 html {
     font-family: 'PT Sans Narrow', sans-serif;
     font-size: 90%;
@@ -322,6 +322,7 @@ body>footer {
 
 main>section>ul>li header a {
     color: white;
+    text-decoration: none;
 }
 
 main>section>ul>li {
@@ -334,6 +335,7 @@ main>section>ul>li {
 
 main>section>ul>li div {
     font-size: 80%;
+    font-family: 'Inconsolata', monospace;
 }
 
 main>section>ul>li article {

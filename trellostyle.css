@@ -1,8 +1,8 @@
 @import url('https://fonts.googleapis.com/css?family=PT+Sans+Narrow');
 html {
     font-family: 'PT Sans Narrow', sans-serif;
-    font-size: 137.5%;
-    line-height: 1.40909em;
+    font-size: 90%;
+    line-height: 1.0em;
     -ms-text-size-adjust: 100%;
     -webkit-text-size-adjust: 100%;
     min-height: 100%;
@@ -327,4 +327,8 @@ main>section>ul>li header a {
 main>section>ul>li {
     background-color: skyblue;
     color: white;
+}
+
+main>section>ul>li div {
+    font-size: 80%;
 }

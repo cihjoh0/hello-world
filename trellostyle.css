@@ -332,3 +332,8 @@ main>section>ul>li {
 main>section>ul>li div {
     font-size: 80%;
 }
+
+main>section>ul>li article {
+    background-color: #6db3d0;
+    padding: 5px;
+}

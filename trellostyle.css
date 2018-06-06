@@ -327,6 +327,9 @@ main>section>ul>li header a {
 main>section>ul>li {
     background-color: skyblue;
     color: white;
+    margin-top: 10px;
+    margin-bottom: 10px;
+    padding: 5px;   
 }
 
 main>section>ul>li div {

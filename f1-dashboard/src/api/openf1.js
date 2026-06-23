@@ -32,3 +32,10 @@ export async function getStints(sessionKey) {
   });
   return data;
 }
+
+export async function getPitStops(sessionKey) {
+  const { data } = await client.get('/pit', {
+    params: { session_key: sessionKey },
+  });
+  return data;
+}

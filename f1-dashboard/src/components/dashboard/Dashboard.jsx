@@ -1,10 +1,12 @@
 import LapTimeChart from '../charts/LapTimeChart';
+import TireStrategyChart from '../charts/TireStrategyChart';
 
 export default function Dashboard() {
   return (
     <div className="dashboard">
       <LapTimeChart />
-      {/* Future panels: TireStrategy, LivePositions, etc. */}
+      <TireStrategyChart />
+      {/* Future panels: LivePositions, etc. */}
     </div>
   );
 }

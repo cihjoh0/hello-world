@@ -25,3 +25,10 @@ export async function getLaps(sessionKey) {
   });
   return data;
 }
+
+export async function getStints(sessionKey) {
+  const { data } = await client.get('/stints', {
+    params: { session_key: sessionKey },
+  });
+  return data;
+}

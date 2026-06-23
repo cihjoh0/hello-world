@@ -1,0 +1,181 @@
+/* ── App shell ─────────────────────────────────────────── */
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #0d0d14;
+  color: #e0e0e8;
+}
+
+.app-header {
+  background: #13131f;
+  border-bottom: 2px solid #e8002d;
+  padding: 0 24px;
+}
+
+.app-header-inner {
+  max-width: 1400px;
+  margin: 0 auto;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo-flag {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.app-title {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #fff;
+  margin: 0;
+}
+
+.app-subtitle {
+  font-size: 12px;
+  color: #666;
+  margin-left: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.app-main {
+  flex: 1;
+  padding: 24px;
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+/* ── Dashboard grid ────────────────────────────────────── */
+.dashboard {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: 1fr;
+}
+
+/* ── Panel ─────────────────────────────────────────────── */
+.panel {
+  background: #13131f;
+  border: 1px solid #1e1e2e;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.panel-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 14px 20px 10px;
+  border-bottom: 1px solid #1e1e2e;
+}
+
+.panel-title {
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #e8002d;
+  margin: 0;
+}
+
+.panel-subtitle {
+  font-size: 12px;
+  color: #666;
+}
+
+.panel-body {
+  padding: 16px 20px 20px;
+}
+
+/* ── Driver filter chips ───────────────────────────────── */
+.driver-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.driver-chip {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--chip-color, #444);
+  background: transparent;
+  color: #888;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.driver-chip.active {
+  background: var(--chip-color, #444);
+  color: #0d0d14;
+}
+
+/* ── Tooltip ────────────────────────────────────────────── */
+.chart-tooltip {
+  background: #1a1a2a;
+  border: 1px solid #2a2a3a;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.tooltip-lap {
+  font-weight: 700;
+  color: #fff;
+  margin: 0 0 4px;
+}
+
+/* ── Spinner ────────────────────────────────────────────── */
+.spinner-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 200px;
+}
+
+.spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid #1e1e2e;
+  border-top-color: #e8002d;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Error ──────────────────────────────────────────────── */
+.error-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #1f1015;
+  border: 1px solid #5c1a20;
+  border-radius: 6px;
+  padding: 12px 16px;
+  color: #f87171;
+  font-size: 13px;
+}
+
+.error-icon {
+  font-weight: 900;
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.error-box p {
+  margin: 0;
+}

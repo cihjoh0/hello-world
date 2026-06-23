@@ -489,3 +489,230 @@
 .pit-verdict--good    { background: rgba(57,181,74,0.15);  color: #39b54a; }
 .pit-verdict--bad     { background: rgba(232,0,45,0.15);   color: #e8002d; }
 .pit-verdict--neutral { background: rgba(100,100,100,0.15); color: #888; }
+
+/* ── Pit Window ─────────────────────────────────────────── */
+.pw-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 16px;
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #1e1e2e;
+}
+
+.pw-control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.pw-control-group--wide {
+  flex: 1;
+  min-width: 160px;
+}
+
+.pw-control-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #555;
+}
+
+.pw-select {
+  background: #1a1a28;
+  border: 1px solid #2a2a3e;
+  border-radius: 4px;
+  color: #e0e0e8;
+  padding: 5px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  outline: none;
+}
+
+.pw-select:focus { border-color: #e8002d; }
+
+.pw-slider {
+  width: 100%;
+  accent-color: #e8002d;
+  cursor: pointer;
+  height: 20px;
+}
+
+.pw-cost-group {
+  display: flex;
+  gap: 10px;
+}
+
+.pw-number {
+  width: 60px;
+  background: #1a1a28;
+  border: 1px solid #2a2a3e;
+  border-radius: 4px;
+  color: #e0e0e8;
+  padding: 5px 6px;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 700;
+  text-align: center;
+  outline: none;
+}
+
+.pw-number:focus { border-color: #e8002d; }
+
+/* Current order strip */
+.pw-current {
+  margin-bottom: 16px;
+}
+
+.pw-current-label {
+  font-size: 11px;
+  color: #555;
+  margin-bottom: 8px;
+}
+
+.pw-current-driver {
+  color: #888;
+  font-weight: 700;
+}
+
+/* Scrollable strip container */
+.pw-strip-scroll {
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+/* The row of car nodes */
+.pw-strip {
+  display: flex;
+  gap: 4px;
+  min-width: max-content;
+  padding: 4px 0;
+}
+
+/* Individual car node */
+.pw-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.pw-dot {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  background: var(--tc, #333);
+  color: #fff;
+  border: 2px solid transparent;
+  transition: transform 0.15s;
+  /* Darken the fill so it stays readable — team colors can be very light */
+  filter: brightness(0.75) saturate(1.3);
+}
+
+/* Selected driver: bright team color border */
+.pw-node--selected .pw-dot {
+  border-color: #fff;
+  filter: brightness(0.9) saturate(1.3);
+  transform: scale(1.1);
+}
+
+/* Ghost car: dashed white outline, dimmed fill, italic */
+.pw-node--ghost .pw-dot {
+  background: transparent;
+  border: 2px dashed var(--tc, #888);
+  color: var(--tc, #888);
+  filter: none;
+  font-style: italic;
+}
+
+.pw-pos {
+  font-size: 9px;
+  color: #555;
+  font-variant-numeric: tabular-nums;
+}
+
+.pw-node--ghost .pw-pos {
+  color: #888;
+  font-weight: 700;
+}
+
+/* Scenario blocks */
+.pw-scenarios {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.pw-scenario {
+  border: 1px solid #1e1e2e;
+  border-radius: 6px;
+  padding: 12px;
+  background: #0f0f1c;
+}
+
+.pw-scenario-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.pw-scenario-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #aaa;
+}
+
+.pw-scenario-delta {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.pw-delta--good    { color: #39b54a; }
+.pw-delta--bad     { color: #e8002d; }
+.pw-delta--neutral { color: #888; }
+
+.pw-scenario-cost {
+  font-size: 10px;
+  color: #444;
+  margin-left: auto;
+}
+
+/* Neighbor gap info */
+.pw-neighbors {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-size: 11px;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.pw-neighbor--ahead  { color: #ffd700; }
+.pw-neighbor--behind { color: #00a0dd; }
+.pw-neighbor--none   { color: #444; font-style: italic; }
+
+.pw-neighbor-sep { flex: 1; }
+
+/* Footnote */
+.pw-footnote {
+  font-size: 10px;
+  color: #3a3a4a;
+  margin: 16px 0 0;
+  font-style: italic;
+  line-height: 1.5;
+}

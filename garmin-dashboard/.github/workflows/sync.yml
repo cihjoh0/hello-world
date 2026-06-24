@@ -17,7 +17,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install -r garmin-dashboard/backend/requirements.txt
+        run: pip install -r backend/requirements.txt
 
       - name: Restore garth session
         run: |
@@ -25,13 +25,15 @@ jobs:
           echo "${{ secrets.GARTH_SESSION }}" | base64 -d > ~/.garth/oauth2_token
 
       - name: Sync activities
-        run: python garmin-dashboard/backend/fetch.py --limit 500
-        working-directory: ${{ github.workspace }}
+        run: python backend/fetch.py --limit 500
 
-      - name: Commit updated database
+      - name: Export to JSON
+        run: python backend/export.py
+
+      - name: Commit data
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add garmin-dashboard/backend/garmin.db
+          git add backend/garmin.db frontend/public/data/
           git diff --cached --quiet || git commit -m "chore: nightly Garmin sync $(date -u +%Y-%m-%d)"
           git push

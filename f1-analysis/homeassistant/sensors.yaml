@@ -1,0 +1,66 @@
+# ── F1 Analysis REST sensors ──────────────────────────────────────────────────
+#
+# Add to your HA configuration.yaml:
+#   sensor: !include_dir_merge_list sensors/
+# or paste directly into an existing sensor list file.
+#
+# Requires the FastF1 analysis server running on port 8000:
+#   cd f1-analysis && uvicorn main:app --port 8000
+#
+# Replace "localhost" with the hostname/IP of the machine running the server
+# if HA is on a different device on the same network.
+
+# Current race event info — updates every hour (session rarely changes mid-race)
+- platform: rest
+  name: f1_session
+  unique_id: f1_session_info
+  resource: http://localhost:8000/ha/session
+  scan_interval: 3600
+  value_template: "{{ value_json.event_name }}"
+  json_attributes:
+    - location
+    - country
+    - year
+    - round
+    - date
+
+# Verstappen pit strategy — poll every 60 s during a race weekend
+- platform: rest
+  name: f1_pit_window_ver
+  unique_id: f1_pit_window_ver
+  resource: http://localhost:8000/ha/driver/VER
+  scan_interval: 60
+  # Main state is "before" | "open" | "after" | "unknown"
+  value_template: "{{ value_json.pit_window_status }}"
+  json_attributes:
+    - driver
+    - current_compound
+    - deg_rate_s_per_lap
+    - optimal_pit_lap
+    - pit_window_opens
+    - pit_window_closes
+    - in_pit_window
+    - current_lap
+    - pit_duration_s
+
+# Norris pit strategy
+- platform: rest
+  name: f1_pit_window_nor
+  unique_id: f1_pit_window_nor
+  resource: http://localhost:8000/ha/driver/NOR
+  scan_interval: 60
+  value_template: "{{ value_json.pit_window_status }}"
+  json_attributes:
+    - driver
+    - current_compound
+    - deg_rate_s_per_lap
+    - optimal_pit_lap
+    - pit_window_opens
+    - pit_window_closes
+    - in_pit_window
+    - current_lap
+    - pit_duration_s
+
+# Add more drivers by duplicating the block above and changing the driver code.
+# Available codes: any 3-letter F1 driver code (VER, HAM, LEC, SAI, RUS, …)
+# Optional query param: ?pit_duration=25 to adjust assumed stop time (default 23 s)

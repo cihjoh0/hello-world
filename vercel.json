@@ -1,0 +1,6 @@
+{
+  "buildCommand": "cd f1-dashboard && npm install && npm run build",
+  "outputDirectory": "f1-dashboard/dist",
+  "framework": null,
+  "installCommand": "echo skip"
+}

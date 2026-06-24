@@ -4,9 +4,10 @@ import { useEffect, useState } from "react";
 import MatchCard from "./components/MatchCard";
 import AnalysisPanel from "./components/AnalysisPanel";
 import Standings from "./components/Standings";
+import TopScorers from "./components/TopScorers";
 import { Match, StandingGroup } from "@/lib/types";
 
-type Tab = "fixtures" | "standings";
+type Tab = "fixtures" | "standings" | "scorers";
 
 export default function Dashboard() {
   const [matches, setMatches] = useState<Match[]>([]);
@@ -63,7 +64,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-6">
           <div className="space-y-6">
             <div className="flex gap-1 bg-white/5 rounded-lg p-1 w-fit">
-              {(["fixtures", "standings"] as Tab[]).map((t) => (
+              {(["fixtures", "standings", "scorers"] as Tab[]).map((t) => (
                 <button
                   key={t}
                   onClick={() => setTab(t)}
@@ -140,8 +141,10 @@ export default function Dashboard() {
                   </section>
                 )}
               </div>
-            ) : (
+            ) : tab === "standings" ? (
               <Standings groups={standings} />
+            ) : (
+              <TopScorers />
             )}
           </div>
 

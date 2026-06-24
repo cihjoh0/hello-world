@@ -20,7 +20,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
-from analysis.session import enable_cache, load_session, latest_race_coords, get_event_info
+from analysis.session import enable_cache, load_session, latest_race_coords, latest_sprint_coords, get_event_info
 from analysis.tyre_deg import analyse_degradation
 from analysis.undercut import simulate_undercut, optimal_pit_window
 from analysis.models import DegResponse, UndercutResponse, WindowResponse
@@ -56,9 +56,12 @@ app.add_middleware(
 # ── Session endpoints ──────────────────────────────────────────────────────────
 
 @app.get("/session/latest")
-def get_latest_session():
-    """Return the year and round number of the most recent completed race."""
-    year, round_ = latest_race_coords()
+def get_latest_session(session_type: str = Query("R")):
+    """Return the year and round number of the most recent session of the given type."""
+    if session_type.upper() in ("S", "SPRINT"):
+        year, round_ = latest_sprint_coords()
+    else:
+        year, round_ = latest_race_coords()
     return {"year": year, "round": round_}
 
 
@@ -164,16 +167,20 @@ def ha_ping():
 
 
 @app.get("/ha/session")
-def ha_session():
+def ha_session(session_type: str = Query("R", description='"R" for race, "S" for sprint')):
     """
-    Latest race event metadata using schedule data only — no session download.
+    Latest event metadata using schedule data only — no session download.
+    Pass session_type=S to get the most recent sprint race weekend.
     Recommended HA scan_interval: 3600 s.
-
-    Returns: event_name, location, country, year, round, date.
     """
     try:
-        year, round_ = latest_race_coords()
-        return get_event_info(year, round_)
+        if session_type.upper() in ("S", "SPRINT"):
+            year, round_ = latest_sprint_coords()
+        else:
+            year, round_ = latest_race_coords()
+        info = get_event_info(year, round_)
+        info["session_type"] = session_type.upper()
+        return info
     except Exception as e:
         raise HTTPException(status_code=503, detail=str(e))
 
@@ -182,6 +189,7 @@ def ha_session():
 def ha_driver(
     code: str,
     pit_duration: float = Query(23.0, description="Assumed pit stop duration (s)"),
+    session_type: str = Query("R", description='"R" for race, "S" for sprint'),
 ):
     """
     Flat JSON for a single driver — designed for HA REST sensors.
@@ -192,13 +200,17 @@ def ha_driver(
     pit_window_status: "before" | "open" | "after" | "unknown"
     Recommended HA scan_interval: 60 s during a race.
     """
+    st = session_type.upper()
     try:
-        year, round_ = latest_race_coords()
+        if st in ("S", "SPRINT"):
+            year, round_ = latest_sprint_coords()
+        else:
+            year, round_ = latest_race_coords()
     except Exception as e:
         raise HTTPException(status_code=503, detail=str(e))
 
     try:
-        session = load_session(year, round_, "R")
+        session = load_session(year, round_, st)
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Session unavailable: {e}")
 

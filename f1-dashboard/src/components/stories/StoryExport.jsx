@@ -25,14 +25,15 @@ function fmtGap(s) {
 
 // ── Data hook ─────────────────────────────────────────────────────────────────
 
-function useStoryData() {
+function useStoryData(sessionType) {
   const [state, setState] = useState({ loading: true, error: null, data: null });
 
   useEffect(() => {
     let cancelled = false;
+    setState({ loading: true, error: null, data: null });
     (async () => {
       try {
-        const session = await getLatestSession('Race');
+        const session = await getLatestSession(sessionType);
         if (!session) throw new Error('No session found');
         const key = session.session_key;
 
@@ -44,6 +45,7 @@ function useStoryData() {
           getPositions(key),
         ]);
 
+        if (!session) throw new Error(`No ${sessionType.toLowerCase()} session found`);
         if (cancelled) return;
 
         // Build driver map: number → driver object
@@ -125,7 +127,7 @@ function useStoryData() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [sessionType]);
 
   return state;
 }
@@ -171,14 +173,14 @@ async function downloadCard(ref, filename) {
 
 // ── Card 1: Podium ────────────────────────────────────────────────────────────
 
-function PodiumCard({ session, result }) {
+function PodiumCard({ session, result, label = 'Race' }) {
   const cardRef = useRef();
   const top3 = [result[1], result[0], result[2]]; // P2 left, P1 center, P3 right
   const heights = [200, 260, 160];
 
   return (
     <div className="story-wrapper">
-      <CardShell cardRef={cardRef} title="RACE RESULT" session={session}>
+      <CardShell cardRef={cardRef} title={`${label.toUpperCase()} RESULT`} session={session}>
         <div className="story-podium">
           {top3.map((driver, i) => {
             if (!driver) return <div key={i} className="story-podium-col" />;
@@ -218,7 +220,7 @@ function PodiumCard({ session, result }) {
           })}
         </div>
       </CardShell>
-      <button className="story-dl-btn" onClick={() => downloadCard(cardRef, 'f1-podium.png')}>
+      <button className="story-dl-btn" onClick={() => downloadCard(cardRef, `f1-${label.toLowerCase()}-result.png`)}>
         Save to Photos
       </button>
     </div>
@@ -227,7 +229,7 @@ function PodiumCard({ session, result }) {
 
 // ── Card 2: Tire Strategy ─────────────────────────────────────────────────────
 
-function TireStrategyCard({ session, stints, driverMap, totalLaps }) {
+function TireStrategyCard({ session, stints, driverMap, totalLaps, label = 'Race' }) {
   const cardRef = useRef();
 
   // Top 10 drivers, sorted by driver number (proxy for finishing position)
@@ -240,7 +242,7 @@ function TireStrategyCard({ session, stints, driverMap, totalLaps }) {
 
   return (
     <div className="story-wrapper">
-      <CardShell cardRef={cardRef} title="TIRE STRATEGY" session={session}>
+      <CardShell cardRef={cardRef} title={`${label.toUpperCase()} STRATEGY`} session={session}>
         <div className="story-strategy">
           {drivers.map(d => {
             const ds = driverStints(d.driver_number);
@@ -292,7 +294,7 @@ function TireStrategyCard({ session, stints, driverMap, totalLaps }) {
 
 // ── Card 3: Fastest Lap ───────────────────────────────────────────────────────
 
-function FastestLapCard({ session, fastestLap, top5Fast }) {
+function FastestLapCard({ session, fastestLap, top5Fast, label = 'Race' }) {
   const cardRef = useRef();
   if (!fastestLap) return null;
 
@@ -389,19 +391,21 @@ function PitStopsCard({ session, pitsSorted }) {
 
 // ── Main modal ────────────────────────────────────────────────────────────────
 
-export default function StoryExport({ onClose }) {
-  const { loading, error, data } = useStoryData();
+export default function StoryExport({ sessionType = 'Race', onClose }) {
+  const { loading, error, data } = useStoryData(sessionType);
+  const isSprint = sessionType === 'Sprint';
+  const label = isSprint ? 'Sprint' : 'Race';
 
   return (
     <div className="story-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="story-modal">
         <div className="story-modal-header">
-          <span>Instagram Stories</span>
+          <span>Instagram Stories · {label}</span>
           <button className="story-close" onClick={onClose}>✕</button>
         </div>
 
         {loading && (
-          <div className="story-loading">Loading race data…</div>
+          <div className="story-loading">Loading {label.toLowerCase()} data…</div>
         )}
 
         {error && (
@@ -410,19 +414,21 @@ export default function StoryExport({ onClose }) {
 
         {data && (
           <div className="story-scroll">
-            <PodiumCard session={data.session} result={data.result} />
+            <PodiumCard session={data.session} result={data.result} label={label} />
             <TireStrategyCard
               session={data.session}
               stints={data.stints}
               driverMap={data.driverMap}
               totalLaps={data.totalLaps}
+              label={label}
             />
             <FastestLapCard
               session={data.session}
               fastestLap={data.fastestLap}
               top5Fast={data.top5Fast}
+              label={label}
             />
-            <PitStopsCard session={data.session} pitsSorted={data.pitsSorted} />
+            {!isSprint && <PitStopsCard session={data.session} pitsSorted={data.pitsSorted} />}
           </div>
         )}
 

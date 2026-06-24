@@ -19,9 +19,9 @@ const COMPOUND_LABEL = {
 
 const FALLBACK = { bg: '#444', fg: '#fff' };
 
-async function fetchStrategyData() {
-  const session = await getLatestSession('Race');
-  if (!session) throw new Error('No race session found');
+async function fetchStrategyData(sessionType) {
+  const session = await getLatestSession(sessionType);
+  if (!session) throw new Error(`No ${sessionType.toLowerCase()} session found`);
   const [drivers, stints] = await Promise.all([
     getDrivers(session.session_key),
     getStints(session.session_key),
@@ -117,8 +117,8 @@ function StintBar({ stint, totalLaps }) {
   );
 }
 
-export default function TireStrategyChart() {
-  const { data, loading, error } = useOpenF1(fetchStrategyData, []);
+export default function TireStrategyChart({ sessionType = 'Race' }) {
+  const { data, loading, error } = useOpenF1(() => fetchStrategyData(sessionType), [sessionType]);
 
   const { rows, totalLaps, subtitle } = useMemo(() => {
     if (!data) return {};

@@ -34,6 +34,19 @@ def latest_race_coords() -> tuple[int, int]:
     return (int(last["year"]) if "year" in last else 2025, int(last["RoundNumber"]))
 
 
+def latest_sprint_coords() -> tuple[int, int]:
+    """Return (year, round) for the most recent sprint race weekend."""
+    for year in (2025, 2024):
+        schedule = fastf1.get_event_schedule(year, include_testing=False)
+        sprints = schedule[
+            schedule["EventFormat"].str.lower().str.contains("sprint", na=False)
+        ]
+        if not sprints.empty:
+            last = sprints.iloc[-1]
+            return (year, int(last["RoundNumber"]))
+    return (2024, 5)  # China 2024 sprint as final fallback
+
+
 def get_event_info(year: int, round_: int) -> dict:
     """Return event metadata from the schedule — no full session download needed."""
     schedule = fastf1.get_event_schedule(year, include_testing=False)

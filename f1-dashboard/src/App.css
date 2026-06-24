@@ -45,6 +45,40 @@
   flex: 1;
 }
 
+/* Race / Sprint toggle */
+.session-type-toggle {
+  display: flex;
+  background: #0d0d14;
+  border: 1px solid #2a2a3e;
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.stt-btn {
+  background: none;
+  border: none;
+  color: #666;
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.stt-btn:hover { color: #aaa; }
+.stt-btn.active { background: #1e1e2e; color: #fff; }
+
+.session-type-note {
+  font-size: 11px;
+  color: #ffd700;
+  background: rgba(255,215,0,.06);
+  border: 1px solid rgba(255,215,0,.15);
+  border-radius: 4px;
+  padding: 6px 10px;
+  margin: 0 0 10px;
+}
+
 .stories-btn {
   background: #e8002d;
   color: #fff;

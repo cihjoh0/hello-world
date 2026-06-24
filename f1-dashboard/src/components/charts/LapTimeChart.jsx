@@ -39,9 +39,9 @@ const COLORS = [
   '#ffffff', '#fe86bc', '#b6babd', '#52e252', '#64c4ff',
 ];
 
-async function fetchRaceData() {
-  const session = await getLatestSession('Race');
-  if (!session) throw new Error('No race session found');
+async function fetchRaceData(sessionType) {
+  const session = await getLatestSession(sessionType);
+  if (!session) throw new Error(`No ${sessionType.toLowerCase()} session found`);
   const [drivers, laps] = await Promise.all([
     getDrivers(session.session_key),
     getLaps(session.session_key),
@@ -84,8 +84,8 @@ function CustomTooltip({ active, payload, label }) {
   );
 }
 
-export default function LapTimeChart() {
-  const { data, loading, error } = useOpenF1(fetchRaceData, []);
+export default function LapTimeChart({ sessionType = 'Race' }) {
+  const { data, loading, error } = useOpenF1(() => fetchRaceData(sessionType), [sessionType]);
   const [visibleSet, setVisibleSet] = useState(null); // null = show top 5 by default
 
   const { session, drivers, chartData, driverCodes } = useMemo(() => {

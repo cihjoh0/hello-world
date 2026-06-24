@@ -141,9 +141,9 @@ function TrackStrip({ order, ghostPos, fromPos, driverNum, pitCost, label, mode 
 
 // ── Fetch ─────────────────────────────────────────────────────────────────────
 
-async function fetchWindowData() {
-  const session = await getLatestSession('Race');
-  if (!session) throw new Error('No race session found');
+async function fetchWindowData(sessionType) {
+  const session = await getLatestSession(sessionType);
+  if (!session) throw new Error(`No ${sessionType.toLowerCase()} session found`);
   const [drivers, laps] = await Promise.all([
     getDrivers(session.session_key),
     getLaps(session.session_key),
@@ -156,8 +156,8 @@ async function fetchWindowData() {
 const DEFAULT_NORMAL_COST = 23;
 const DEFAULT_SC_COST     = 20;
 
-export default function PitWindowPanel() {
-  const { data, loading, error } = useOpenF1(fetchWindowData, []);
+export default function PitWindowPanel({ sessionType = 'Race' }) {
+  const { data, loading, error } = useOpenF1(() => fetchWindowData(sessionType), [sessionType]);
 
   const [driverNum,    setDriverNum]    = useState(null);
   const [lapN,         setLapN]         = useState(null);
@@ -199,11 +199,17 @@ export default function PitWindowPanel() {
 
   const drivers = data?.drivers ?? [];
   const selectedDriver = drivers.find(d => d.driver_number === driverNum);
+  const isSprint = sessionType === 'Sprint';
 
   return (
     <DashboardPanel title="Pit Window" subtitle={subtitle}>
       {loading && <LoadingSpinner />}
       {error   && <ErrorMessage message={error} />}
+      {isSprint && data && (
+        <p className="session-type-note">
+          Sprint races rarely feature pit stops — this shows where a driver would emerge if they did pit.
+        </p>
+      )}
 
       {!loading && !error && data && (
         <>

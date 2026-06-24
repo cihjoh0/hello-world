@@ -62,7 +62,7 @@ function DegTooltip({ active, payload, label }) {
   );
 }
 
-function DegradationTab({ year, round, drivers }) {
+function DegradationTab({ year, round, drivers, f1Code = 'R' }) {
   const [driver, setDriver]     = useState(drivers[0] ?? '');
   const [state, setState]       = useState({ loading: false, data: null, error: null });
   const [selStint, setSelStint] = useState(0);
@@ -70,7 +70,7 @@ function DegradationTab({ year, round, drivers }) {
   const load = useCallback(async (drv) => {
     setState({ loading: true, data: null, error: null });
     try {
-      const d = await getDegradation(year, round, drv);
+      const d = await getDegradation(year, round, drv, f1Code);
       setState({ loading: false, data: d, error: null });
       setSelStint(0);
     } catch (e) {
@@ -162,7 +162,7 @@ function UndercutTooltip({ active, payload, label }) {
   );
 }
 
-function UndercutTab({ year, round, drivers, totalLaps }) {
+function UndercutTab({ year, round, drivers, totalLaps, f1Code = 'R' }) {
   const [dA, setDA]         = useState(drivers[0] ?? '');
   const [dB, setDB]         = useState(drivers[1] ?? '');
   const [pitLap, setPitLap] = useState(Math.round((totalLaps || 50) * 0.4));
@@ -172,7 +172,7 @@ function UndercutTab({ year, round, drivers, totalLaps }) {
   const run = useCallback(async () => {
     setState({ loading: true, result: null, error: null });
     try {
-      const r = await getUndercut(year, round, dA, dB, pitLap, dur);
+      const r = await getUndercut(year, round, dA, dB, pitLap, dur, f1Code);
       setState({ loading: false, result: r, error: null });
     } catch (e) {
       setState({ loading: false, result: null, error: e.message });
@@ -279,7 +279,7 @@ function WindowTooltip({ active, payload, label }) {
   );
 }
 
-function PitWindowTab({ year, round, drivers, totalLaps }) {
+function PitWindowTab({ year, round, drivers, totalLaps, f1Code = 'R' }) {
   const [driver, setDriver] = useState(drivers[0] ?? '');
   const [dur, setDur]       = useState(23);
   const [state, setState]   = useState({ loading: false, result: null, error: null });
@@ -287,7 +287,7 @@ function PitWindowTab({ year, round, drivers, totalLaps }) {
   const run = useCallback(async () => {
     setState({ loading: true, result: null, error: null });
     try {
-      const r = await getPitWindow(year, round, driver, dur);
+      const r = await getPitWindow(year, round, driver, dur, f1Code);
       setState({ loading: false, result: r, error: null });
     } catch (e) {
       setState({ loading: false, result: null, error: e.message });
@@ -455,18 +455,24 @@ const TABS = [
   { id: 'ha',       label: 'Home Assistant' },
 ];
 
-export default function FastF1Panel() {
+export default function FastF1Panel({ sessionType = 'Race' }) {
   const [status, setStatus]           = useState('loading'); // loading | offline | ready
   const [coords, setCoords]           = useState(null);
   const [sessionInfo, setSessionInfo] = useState(null);
   const [activeTab, setActiveTab]     = useState('deg');
 
+  // Map frontend session type to FastF1 session code
+  const f1Code = sessionType === 'Sprint' ? 'S' : 'R';
+
   useEffect(() => {
-    getLatestRaceCoords()
-      .then(c => { setCoords(c); return getSessionInfo(c.year, c.round); })
+    setStatus('loading');
+    setCoords(null);
+    setSessionInfo(null);
+    getLatestRaceCoords(f1Code)
+      .then(c => { setCoords(c); return getSessionInfo(c.year, c.round, f1Code); })
       .then(info => { setSessionInfo(info); setStatus('ready'); })
       .catch(() => setStatus('offline'));
-  }, []);
+  }, [f1Code]);
 
   const subtitle = sessionInfo
     ? `${sessionInfo.event_name} · ${sessionInfo.location} · ${coords?.year}`
@@ -514,15 +520,15 @@ export default function FastF1Panel() {
 
           {activeTab === 'deg' && (
             <DegradationTab year={coords.year} round={coords.round}
-              drivers={sessionInfo.drivers} />
+              drivers={sessionInfo.drivers} f1Code={f1Code} />
           )}
           {activeTab === 'undercut' && (
             <UndercutTab year={coords.year} round={coords.round}
-              drivers={sessionInfo.drivers} totalLaps={sessionInfo.total_laps} />
+              drivers={sessionInfo.drivers} totalLaps={sessionInfo.total_laps} f1Code={f1Code} />
           )}
           {activeTab === 'window' && (
             <PitWindowTab year={coords.year} round={coords.round}
-              drivers={sessionInfo.drivers} totalLaps={sessionInfo.total_laps} />
+              drivers={sessionInfo.drivers} totalLaps={sessionInfo.total_laps} f1Code={f1Code} />
           )}
           {activeTab === 'ha' && <HomeAssistantTab />}
         </>

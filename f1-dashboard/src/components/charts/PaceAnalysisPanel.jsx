@@ -26,9 +26,9 @@ function fmtDelta(d) {
   return (d >= 0 ? '+' : '') + d.toFixed(3) + 's';
 }
 
-async function fetchAnalysisData() {
-  const session = await getLatestSession('Race');
-  if (!session) throw new Error('No race session found');
+async function fetchAnalysisData(sessionType) {
+  const session = await getLatestSession(sessionType);
+  if (!session) throw new Error(`No ${sessionType.toLowerCase()} session found`);
   const [drivers, laps, pitStops, stints] = await Promise.all([
     getDrivers(session.session_key),
     getLaps(session.session_key),
@@ -230,8 +230,8 @@ function PitCard({ card }) {
 
 // ── Main panel ────────────────────────────────────────────────────────────────
 
-export default function PaceAnalysisPanel() {
-  const { data, loading, error } = useOpenF1(fetchAnalysisData, []);
+export default function PaceAnalysisPanel({ sessionType = 'Race' }) {
+  const { data, loading, error } = useOpenF1(() => fetchAnalysisData(sessionType), [sessionType]);
   const [driverANum, setDriverANum] = useState(null);
   const [driverBNum, setDriverBNum] = useState(null);
 

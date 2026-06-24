@@ -18,9 +18,9 @@ async function get(path, params = {}) {
   return res.json();
 }
 
-/** Returns { year, round } for the most recent completed race. */
-export async function getLatestRaceCoords() {
-  return get('/session/latest');
+/** Returns { year, round } for the most recent session of the given type (R=race, S=sprint). */
+export async function getLatestRaceCoords(sessionType = 'R') {
+  return get('/session/latest', { session_type: sessionType });
 }
 
 /** Event metadata: drivers list, total_laps, location, etc. */

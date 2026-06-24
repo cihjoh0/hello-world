@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useOpenF1 } from '../../hooks/useOpenF1';
-import { getLatestSession, getDrivers, getStints } from '../../api/openf1';
+import { resolveSession, getDrivers, getStints } from '../../api/openf1';
 import DashboardPanel from '../dashboard/DashboardPanel';
 import LoadingSpinner from '../ui/LoadingSpinner';
 import ErrorMessage from '../ui/ErrorMessage';
@@ -19,8 +19,8 @@ const COMPOUND_LABEL = {
 
 const FALLBACK = { bg: '#444', fg: '#fff' };
 
-async function fetchStrategyData(sessionType) {
-  const session = await getLatestSession(sessionType);
+async function fetchStrategyData(sessionType, sessionKey) {
+  const session = await resolveSession(sessionType, sessionKey);
   if (!session) throw new Error(`No ${sessionType.toLowerCase()} session found`);
   const [drivers, stints] = await Promise.all([
     getDrivers(session.session_key),
@@ -117,8 +117,8 @@ function StintBar({ stint, totalLaps }) {
   );
 }
 
-export default function TireStrategyChart({ sessionType = 'Race' }) {
-  const { data, loading, error } = useOpenF1(() => fetchStrategyData(sessionType), [sessionType]);
+export default function TireStrategyChart({ sessionType = 'Race', sessionKey = null }) {
+  const { data, loading, error } = useOpenF1(() => fetchStrategyData(sessionType, sessionKey), [sessionType, sessionKey]);
 
   const { rows, totalLaps, subtitle } = useMemo(() => {
     if (!data) return {};

@@ -4,7 +4,7 @@ import {
   Tooltip, ReferenceLine, ResponsiveContainer,
 } from 'recharts';
 import { useOpenF1 } from '../../hooks/useOpenF1';
-import { getLatestSession, getDrivers, getLaps, getPitStops, getStints } from '../../api/openf1';
+import { resolveSession, getDrivers, getLaps, getPitStops, getStints } from '../../api/openf1';
 import DashboardPanel from '../dashboard/DashboardPanel';
 import LoadingSpinner from '../ui/LoadingSpinner';
 import ErrorMessage from '../ui/ErrorMessage';
@@ -26,8 +26,8 @@ function fmtDelta(d) {
   return (d >= 0 ? '+' : '') + d.toFixed(3) + 's';
 }
 
-async function fetchAnalysisData(sessionType) {
-  const session = await getLatestSession(sessionType);
+async function fetchAnalysisData(sessionType, sessionKey) {
+  const session = await resolveSession(sessionType, sessionKey);
   if (!session) throw new Error(`No ${sessionType.toLowerCase()} session found`);
   const [drivers, laps, pitStops, stints] = await Promise.all([
     getDrivers(session.session_key),
@@ -230,8 +230,8 @@ function PitCard({ card }) {
 
 // ── Main panel ────────────────────────────────────────────────────────────────
 
-export default function PaceAnalysisPanel({ sessionType = 'Race' }) {
-  const { data, loading, error } = useOpenF1(() => fetchAnalysisData(sessionType), [sessionType]);
+export default function PaceAnalysisPanel({ sessionType = 'Race', sessionKey = null }) {
+  const { data, loading, error } = useOpenF1(() => fetchAnalysisData(sessionType, sessionKey), [sessionType, sessionKey]);
   const [driverANum, setDriverANum] = useState(null);
   const [driverBNum, setDriverBNum] = useState(null);
 

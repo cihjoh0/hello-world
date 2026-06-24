@@ -79,6 +79,20 @@
   margin: 0 0 10px;
 }
 
+.race-select {
+  background: #0d0d14;
+  border: 1px solid #2a2a3e;
+  border-radius: 6px;
+  color: #e0e0e8;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 10px;
+  cursor: pointer;
+  flex-shrink: 0;
+  max-width: 160px;
+}
+.race-select:focus { outline: none; border-color: #e8002d; }
+
 .stories-btn {
   background: #e8002d;
   color: #fff;

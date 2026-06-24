@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import html2canvas from 'html2canvas';
 import {
-  getLatestSession, getDrivers, getLaps,
+  resolveSession, getDrivers, getLaps,
   getStints, getPitStops, getPositions,
 } from '../../api/openf1';
 
@@ -25,7 +25,7 @@ function fmtGap(s) {
 
 // ── Data hook ─────────────────────────────────────────────────────────────────
 
-function useStoryData(sessionType) {
+function useStoryData(sessionType, sessionKey = null) {
   const [state, setState] = useState({ loading: true, error: null, data: null });
 
   useEffect(() => {
@@ -33,7 +33,7 @@ function useStoryData(sessionType) {
     setState({ loading: true, error: null, data: null });
     (async () => {
       try {
-        const session = await getLatestSession(sessionType);
+        const session = await resolveSession(sessionType, sessionKey);
         if (!session) throw new Error('No session found');
         const key = session.session_key;
 
@@ -127,7 +127,7 @@ function useStoryData(sessionType) {
       }
     })();
     return () => { cancelled = true; };
-  }, [sessionType]);
+  }, [sessionType, sessionKey]);
 
   return state;
 }
@@ -391,8 +391,8 @@ function PitStopsCard({ session, pitsSorted }) {
 
 // ── Main modal ────────────────────────────────────────────────────────────────
 
-export default function StoryExport({ sessionType = 'Race', onClose }) {
-  const { loading, error, data } = useStoryData(sessionType);
+export default function StoryExport({ sessionType = 'Race', sessionKey = null, onClose }) {
+  const { loading, error, data } = useStoryData(sessionType, sessionKey);
   const isSprint = sessionType === 'Sprint';
   const label = isSprint ? 'Sprint' : 'Race';
 

@@ -10,7 +10,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { useOpenF1 } from '../../hooks/useOpenF1';
-import { getLatestSession, getDrivers, getLaps } from '../../api/openf1';
+import { resolveSession, getDrivers, getLaps } from '../../api/openf1';
 import DashboardPanel from '../dashboard/DashboardPanel';
 import LoadingSpinner from '../ui/LoadingSpinner';
 import ErrorMessage from '../ui/ErrorMessage';
@@ -39,8 +39,8 @@ const COLORS = [
   '#ffffff', '#fe86bc', '#b6babd', '#52e252', '#64c4ff',
 ];
 
-async function fetchRaceData(sessionType) {
-  const session = await getLatestSession(sessionType);
+async function fetchRaceData(sessionType, sessionKey) {
+  const session = await resolveSession(sessionType, sessionKey);
   if (!session) throw new Error(`No ${sessionType.toLowerCase()} session found`);
   const [drivers, laps] = await Promise.all([
     getDrivers(session.session_key),
@@ -84,8 +84,8 @@ function CustomTooltip({ active, payload, label }) {
   );
 }
 
-export default function LapTimeChart({ sessionType = 'Race' }) {
-  const { data, loading, error } = useOpenF1(() => fetchRaceData(sessionType), [sessionType]);
+export default function LapTimeChart({ sessionType = 'Race', sessionKey = null }) {
+  const { data, loading, error } = useOpenF1(() => fetchRaceData(sessionType, sessionKey), [sessionType, sessionKey]);
   const [visibleSet, setVisibleSet] = useState(null); // null = show top 5 by default
 
   const { session, drivers, chartData, driverCodes } = useMemo(() => {

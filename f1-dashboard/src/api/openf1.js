@@ -39,3 +39,10 @@ export async function getPitStops(sessionKey) {
   });
   return data;
 }
+
+export async function getPositions(sessionKey) {
+  const { data } = await client.get('/position', {
+    params: { session_key: sessionKey },
+  });
+  return data;
+}

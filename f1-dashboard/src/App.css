@@ -42,7 +42,23 @@
   margin-left: 4px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+  flex: 1;
 }
+
+.stories-btn {
+  background: #e8002d;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 16px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.stories-btn:hover { background: #c0001f; }
 
 .app-main {
   flex: 1;
@@ -986,3 +1002,391 @@
 .f1-ha-badge--open    { background: rgba(57,181,74,.15);  color: #39b54a; }
 .f1-ha-badge--after   { background: rgba(232,0,45,.12);   color: #e8002d; }
 .f1-ha-badge--unknown { background: rgba(136,136,136,.1); color: #666; }
+
+/* ── Instagram Story Export ───────────────────────────────── */
+
+/* Modal overlay */
+.story-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.85);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.story-modal {
+  background: #13131f;
+  border: 1px solid #1e1e2e;
+  border-radius: 12px;
+  width: min(96vw, 1100px);
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.story-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid #1e1e2e;
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #fff;
+  flex-shrink: 0;
+}
+.story-close {
+  background: none;
+  border: none;
+  color: #666;
+  font-size: 18px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 4px;
+}
+.story-close:hover { color: #fff; }
+
+/* Horizontal scroll container */
+.story-scroll {
+  display: flex;
+  gap: 20px;
+  overflow-x: auto;
+  padding: 20px;
+  flex: 1;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+.story-scroll::-webkit-scrollbar { height: 4px; }
+.story-scroll::-webkit-scrollbar-track { background: #0d0d14; }
+.story-scroll::-webkit-scrollbar-thumb { background: #2a2a3e; border-radius: 2px; }
+
+.story-loading, .story-error {
+  padding: 40px;
+  text-align: center;
+  color: #666;
+  font-size: 13px;
+}
+.story-error { color: #e8002d; }
+
+.story-hint {
+  font-size: 11px;
+  color: #444;
+  text-align: center;
+  padding: 10px 20px 14px;
+  margin: 0;
+  flex-shrink: 0;
+  border-top: 1px solid #1a1a28;
+}
+
+/* Wrapper = card + download button */
+.story-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  scroll-snap-align: start;
+}
+.story-dl-btn {
+  background: #e8002d;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 20px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  width: 100%;
+}
+.story-dl-btn:hover { background: #c0001f; }
+
+/* ── Story card (9:16 portrait) ───────────────────────────── */
+.story-card {
+  width: 315px;
+  height: 560px;
+  background: #0d0d14;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  font-family: inherit;
+}
+
+.story-header {
+  padding: 14px 16px 10px;
+  background: #13131f;
+  flex-shrink: 0;
+}
+.story-header-bar {
+  width: 32px;
+  height: 3px;
+  background: #e8002d;
+  border-radius: 2px;
+  margin-bottom: 8px;
+}
+.story-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-bottom: 8px;
+}
+.story-event {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #e8002d;
+  font-weight: 700;
+}
+.story-loc {
+  font-size: 11px;
+  color: #aaa;
+  font-weight: 500;
+}
+.story-card-title {
+  font-size: 20px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #fff;
+  line-height: 1;
+}
+
+.story-body {
+  flex: 1;
+  overflow: hidden;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.story-footer {
+  padding: 8px 16px;
+  background: #0a0a12;
+  flex-shrink: 0;
+}
+.story-brand {
+  font-size: 9px;
+  color: #333;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* ── Podium card ──────────────────────────────────────────── */
+.story-podium {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+.story-podium-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.story-podium-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.story-podium-driver {
+  font-size: 16px;
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: 0.02em;
+}
+.story-podium-team {
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+.story-podium-gap {
+  font-size: 9px;
+  color: #aaa;
+}
+.story-podium-block {
+  width: 100%;
+  border-radius: 4px 4px 0 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 10px;
+}
+.story-podium-pos {
+  font-size: 28px;
+  font-weight: 900;
+  color: rgba(255,255,255,.6);
+}
+
+.story-result-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.story-result-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: #13131f;
+  border-radius: 4px;
+}
+.story-result-pos { font-size: 10px; color: #666; width: 22px; }
+.story-result-driver { font-size: 12px; font-weight: 700; flex: 1; }
+.story-result-gap { font-size: 10px; color: #888; white-space: nowrap; }
+
+/* ── Tire strategy card ───────────────────────────────────── */
+.story-strategy {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  overflow: hidden;
+}
+.story-strategy-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 20px;
+}
+.story-strategy-driver {
+  font-size: 9px;
+  font-weight: 700;
+  color: #aaa;
+  width: 28px;
+  flex-shrink: 0;
+  text-align: right;
+}
+.story-strategy-track {
+  flex: 1;
+  height: 14px;
+  background: #1a1a28;
+  border-radius: 3px;
+  position: relative;
+  overflow: hidden;
+}
+.story-strategy-stint {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 2px;
+  border-right: 1px solid #0d0d14;
+}
+.story-strategy-axis {
+  position: relative;
+  height: 14px;
+  margin-left: 36px;
+}
+.story-strategy-axis span {
+  position: absolute;
+  transform: translateX(-50%);
+  font-size: 8px;
+  color: #444;
+}
+.story-compound-legend {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.story-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 9px;
+  color: #888;
+}
+.story-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ── Fastest lap card ─────────────────────────────────────── */
+.story-fastest-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 0 8px;
+  border-bottom: 1px solid #1e1e2e;
+  gap: 2px;
+}
+.story-fastest-time {
+  font-size: 32px;
+  font-weight: 900;
+  color: #e8002d;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.story-fastest-driver {
+  font-size: 20px;
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: 0.04em;
+}
+.story-fastest-meta {
+  font-size: 10px;
+  color: #888;
+}
+
+.story-fast-bars { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.story-fast-label { font-size: 9px; color: #555; text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 4px; }
+.story-fast-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.story-fast-pos   { font-size: 9px; color: #555; width: 16px; text-align: right; }
+.story-fast-name  { font-size: 10px; font-weight: 700; width: 28px; }
+.story-fast-bar-track {
+  flex: 1;
+  height: 10px;
+  background: #1a1a28;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.story-fast-bar { height: 100%; border-radius: 2px; }
+.story-fast-t { font-size: 9px; color: #aaa; white-space: nowrap; font-variant-numeric: tabular-nums; width: 60px; text-align: right; }
+
+/* ── Pit stop card ────────────────────────────────────────── */
+.story-pit-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 0 8px;
+  border-bottom: 1px solid #1e1e2e;
+  gap: 2px;
+}
+.story-pit-best-label { font-size: 9px; color: #555; text-transform: uppercase; letter-spacing: 0.08em; }
+.story-pit-best-time  { font-size: 36px; font-weight: 900; color: #39b54a; font-variant-numeric: tabular-nums; }
+.story-pit-best-driver { font-size: 11px; color: #888; }
+
+.story-pit-bars { flex: 1; display: flex; flex-direction: column; gap: 5px; overflow: hidden; }
+.story-pit-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.story-pit-driver { font-size: 9px; font-weight: 700; width: 28px; }
+.story-pit-bar-track {
+  flex: 1;
+  height: 10px;
+  background: #1a1a28;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.story-pit-bar { height: 100%; border-radius: 2px; }
+.story-pit-dur { font-size: 9px; color: #aaa; white-space: nowrap; width: 32px; text-align: right; }

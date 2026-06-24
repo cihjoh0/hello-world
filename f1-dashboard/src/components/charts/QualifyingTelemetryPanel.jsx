@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  Legend, ResponsiveContainer,
+  Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
 import {
   resolveSession, getQualifyingSession, getDrivers, getLaps, getCarData,
@@ -19,7 +19,7 @@ function fmtLap(s) {
 }
 
 const DRIVER_COLORS = ['#e8002d', '#00a0dd', '#39b54a', '#ff8700'];
-const TABS = ['Speed', 'Throttle & Brake', 'Gear'];
+const TABS = ['Speed', 'Throttle & Brake', 'Gear', 'Δ Time'];
 const MAX_DRIVERS = 4;
 const CHART_STEP_S = 0.25; // resample grid every 250 ms
 
@@ -56,6 +56,33 @@ function extractLapTelemetry(carData, lap) {
       rpm:      d.rpm      ?? null,
     }))
     .sort((a, b) => a.elapsed - b.elapsed);
+}
+
+// Add cumulative distance (metres) to each telemetry point via trapezoidal integration
+function addDistance(tel) {
+  if (!tel.length) return tel;
+  const out = [{ ...tel[0], dist: 0 }];
+  for (let i = 1; i < tel.length; i++) {
+    const dt = tel[i].elapsed - tel[i - 1].elapsed;
+    const avgSpeedMs = ((tel[i].speed ?? 0) + (tel[i - 1].speed ?? 0)) / 2 / 3.6;
+    out.push({ ...tel[i], dist: out[i - 1].dist + avgSpeedMs * dt });
+  }
+  return out;
+}
+
+// Linear interpolation: find elapsed time at targetDist metres
+function interpElapsed(telDist, targetDist) {
+  let lo = 0, hi = telDist.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (telDist[mid].dist < targetDist) lo = mid + 1;
+    else hi = mid;
+  }
+  if (lo === 0) return telDist[0].elapsed;
+  const a = telDist[lo - 1], b = telDist[lo];
+  if (b.dist === a.dist) return a.elapsed;
+  const frac = (targetDist - a.dist) / (b.dist - a.dist);
+  return a.elapsed + frac * (b.elapsed - a.elapsed);
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -163,9 +190,41 @@ export default function QualifyingTelemetryPanel({ sessionType = 'Race', session
       }));
   }, [fastestLaps, drivers]);
 
+  // Precompute cumulative distance for each driver's telemetry
+  const telWithDist = useMemo(() => {
+    const out = {};
+    for (const num of selected) {
+      if (telemetry[num]?.length > 0) out[num] = addDistance(telemetry[num]);
+    }
+    return out;
+  }, [selected, telemetry]);
+
   const chartData = useMemo(() => {
     const selNums = selected.filter(n => telemetry[n]?.length > 0);
     if (!selNums.length) return [];
+
+    if (activeTab === 'Δ Time') {
+      // Reference = first selected driver (fastest qualifier in selection)
+      const refNum = selNums[0];
+      const refTel = telWithDist[refNum];
+      if (!refTel?.length) return [];
+
+      const maxDist = Math.min(...selNums.map(n => telWithDist[n]?.at(-1)?.dist ?? 0));
+      const DIST_STEP = 50; // metres
+      const points = [];
+
+      for (let d = 0; d <= maxDist; d += DIST_STEP) {
+        const row = { dist: Math.round(d) };
+        const tRef = interpElapsed(refTel, d);
+        for (const num of selNums) {
+          const idx = selected.indexOf(num);
+          const t   = interpElapsed(telWithDist[num], d);
+          row[`d${idx}`] = num === refNum ? 0 : +( t - tRef).toFixed(3);
+        }
+        points.push(row);
+      }
+      return points;
+    }
 
     const maxElapsed = Math.max(...selNums.map(n => telemetry[n].at(-1)?.elapsed ?? 0));
     const points = [];
@@ -186,7 +245,7 @@ export default function QualifyingTelemetryPanel({ sessionType = 'Race', session
       points.push(row);
     }
     return points;
-  }, [selected, telemetry, activeTab]);
+  }, [selected, telemetry, telWithDist, activeTab]);
 
   // ── Render ──
   const subtitle = qualSession
@@ -195,7 +254,13 @@ export default function QualifyingTelemetryPanel({ sessionType = 'Race', session
 
   const anyTelLoading = selected.some(n => telLoading[n]);
 
-  const yLabel = activeTab === 'Speed' ? 'km/h' : activeTab === 'Gear' ? 'Gear' : '%';
+  const isDelta = activeTab === 'Δ Time';
+  const refDriverNum = selected.find(n => telemetry[n]?.length > 0);
+  const refDriver    = drivers.find(d => d.driver_number === refDriverNum);
+
+  const xKey   = isDelta ? 'dist' : 'elapsed';
+  const xLabel = isDelta ? 'Distance (m)' : 'Elapsed (s)';
+  const yLabel  = isDelta ? 'Gap (s)' : activeTab === 'Speed' ? 'km/h' : activeTab === 'Gear' ? 'Gear' : '%';
 
   return (
     <DashboardPanel title="Qualifying Telemetry" subtitle={subtitle}>
@@ -249,15 +314,21 @@ export default function QualifyingTelemetryPanel({ sessionType = 'Race', session
             </p>
           )}
 
+          {isDelta && refDriver && (
+            <p className="f1-hint" style={{ padding: '0.25rem 0' }}>
+              Reference: <strong style={{ color: DRIVER_COLORS[selected.indexOf(refDriverNum)] }}>{refDriver.name_acronym ?? refDriverNum}</strong> — positive = behind reference
+            </p>
+          )}
+
           {/* Chart */}
           {!anyTelLoading && chartData.length > 0 && (
             <ResponsiveContainer width="100%" height={260}>
               <LineChart data={chartData} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" />
                 <XAxis
-                  dataKey="elapsed"
+                  dataKey={xKey}
                   tick={{ fill: '#888', fontSize: 10 }}
-                  label={{ value: 'Elapsed (s)', position: 'insideBottomRight', offset: -8, fill: '#555', fontSize: 10 }}
+                  label={{ value: xLabel, position: 'insideBottomRight', offset: -8, fill: '#555', fontSize: 10 }}
                 />
                 <YAxis
                   tick={{ fill: '#888', fontSize: 10 }}
@@ -266,9 +337,16 @@ export default function QualifyingTelemetryPanel({ sessionType = 'Race', session
                 />
                 <Tooltip
                   contentStyle={{ background: '#13131f', border: '1px solid #2a2a3e', fontSize: 11 }}
-                  formatter={v => v == null ? '—' : activeTab === 'Speed' ? `${v} km/h` : activeTab === 'Gear' ? `Gear ${v}` : `${v}%`}
+                  formatter={(v, name) => {
+                    if (v == null) return '—';
+                    if (isDelta) return `${v > 0 ? '+' : ''}${v.toFixed(3)} s`;
+                    if (activeTab === 'Speed') return `${v} km/h`;
+                    if (activeTab === 'Gear') return `Gear ${v}`;
+                    return `${v}%`;
+                  }}
                 />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
+                {isDelta && <ReferenceLine y={0} stroke="#555" strokeDasharray="4 2" />}
                 {selected.map((num, i) => {
                   const drv  = drivers.find(d => d.driver_number === num);
                   const code = drv?.name_acronym ?? num;
@@ -282,8 +360,10 @@ export default function QualifyingTelemetryPanel({ sessionType = 'Race', session
                     ];
                   }
                   return (
-                    <Line key={`d${i}`} dataKey={`d${i}`} name={code}
-                      stroke={col} dot={false} strokeWidth={1.5} connectNulls isAnimationActive={false} />
+                    <Line key={`d${i}`} dataKey={`d${i}`} name={isDelta && num === refDriverNum ? `${code} (ref)` : code}
+                      stroke={col} dot={false} strokeWidth={isDelta && num === refDriverNum ? 1 : 1.5}
+                      strokeDasharray={isDelta && num === refDriverNum ? '4 2' : undefined}
+                      connectNulls isAnimationActive={false} />
                   );
                 })}
               </LineChart>

@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useOpenF1 } from '../../hooks/useOpenF1';
-import { resolveSession, getDrivers, getStints } from '../../api/openf1';
+import { resolveSession, getDrivers, getStints, getPositions } from '../../api/openf1';
 import DashboardPanel from '../dashboard/DashboardPanel';
 import LoadingSpinner from '../ui/LoadingSpinner';
 import ErrorMessage from '../ui/ErrorMessage';
@@ -22,14 +22,15 @@ const FALLBACK = { bg: '#444', fg: '#fff' };
 async function fetchStrategyData(sessionType, sessionKey) {
   const session = await resolveSession(sessionType, sessionKey);
   if (!session) throw new Error(`No ${sessionType.toLowerCase()} session found`);
-  const [drivers, stints] = await Promise.all([
+  const [drivers, stints, positions] = await Promise.all([
     getDrivers(session.session_key),
     getStints(session.session_key),
+    getPositions(session.session_key),
   ]);
-  return { session, drivers, stints };
+  return { session, drivers, stints, positions };
 }
 
-function buildRows(drivers, stints) {
+function buildRows(drivers, stints, positions = []) {
   const driverMap = Object.fromEntries(
     drivers.map((d) => [d.driver_number, d])
   );
@@ -48,19 +49,22 @@ function buildRows(drivers, stints) {
     byDriver[num].sort((a, b) => a.stint_number - b.stint_number);
   }
 
-  // Sort drivers by team then driver number for a clean grouped layout
+  // Final race position: last position entry (by date) per driver
+  const finalPos = {};
+  for (const p of positions) {
+    if (!finalPos[p.driver_number] || p.date > finalPos[p.driver_number].date) {
+      finalPos[p.driver_number] = p;
+    }
+  }
+
   const rows = Object.entries(byDriver)
     .map(([num, driverStints]) => ({
       driver: driverMap[num],
       stints: driverStints,
+      position: finalPos[num]?.position ?? 999,
     }))
     .filter((r) => r.driver)
-    .sort((a, b) => {
-      const teamA = a.driver.team_name ?? '';
-      const teamB = b.driver.team_name ?? '';
-      if (teamA !== teamB) return teamA.localeCompare(teamB);
-      return (a.driver.driver_number ?? 0) - (b.driver.driver_number ?? 0);
-    });
+    .sort((a, b) => a.position - b.position);
 
   return { rows, totalLaps };
 }
@@ -122,7 +126,7 @@ export default function TireStrategyChart({ sessionType = 'Race', sessionKey = n
 
   const { rows, totalLaps, subtitle } = useMemo(() => {
     if (!data) return {};
-    const { rows, totalLaps } = buildRows(data.drivers, data.stints);
+    const { rows, totalLaps } = buildRows(data.drivers, data.stints, data.positions);
     const s = data.session;
     return {
       rows,
@@ -148,12 +152,13 @@ export default function TireStrategyChart({ sessionType = 'Race', sessionKey = n
           <LapAxis totalLaps={totalLaps} />
 
           <div className="strategy-grid">
-            {rows.map(({ driver, stints }) => (
+            {rows.map(({ driver, stints, position }) => (
               <div key={driver.driver_number} className="strategy-row">
                 <span
                   className="strategy-driver"
                   style={{ color: driver.team_colour ? `#${driver.team_colour}` : '#888' }}
                 >
+                  {position < 999 && <span className="strategy-pos">P{position}</span>}
                   {driver.name_acronym ?? driver.driver_number}
                 </span>
                 <div className="strategy-track">

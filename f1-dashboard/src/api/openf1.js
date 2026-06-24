@@ -48,6 +48,20 @@ export async function getLatestSession(sessionType = 'Race') {
   return data[data.length - 1] ?? null;
 }
 
+// All sessions of a type for a given year, sorted ascending by date.
+export async function getSessions(year, sessionType = 'Race') {
+  return listGet('/sessions', { year, session_type: sessionType });
+}
+
+// Returns a specific session by key, or the latest of sessionType as fallback.
+export async function resolveSession(sessionType, sessionKey = null) {
+  if (sessionKey) {
+    const data = await listGet('/sessions', { session_key: sessionKey });
+    return data[0] ?? null;
+  }
+  return getLatestSession(sessionType);
+}
+
 export async function getDrivers(sessionKey) {
   return listGet('/drivers', { session_key: sessionKey });
 }

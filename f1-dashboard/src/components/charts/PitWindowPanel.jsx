@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useOpenF1 } from '../../hooks/useOpenF1';
-import { getLatestSession, getDrivers, getLaps } from '../../api/openf1';
+import { resolveSession, getDrivers, getLaps } from '../../api/openf1';
 import DashboardPanel from '../dashboard/DashboardPanel';
 import LoadingSpinner from '../ui/LoadingSpinner';
 import ErrorMessage from '../ui/ErrorMessage';
@@ -141,8 +141,8 @@ function TrackStrip({ order, ghostPos, fromPos, driverNum, pitCost, label, mode 
 
 // ── Fetch ─────────────────────────────────────────────────────────────────────
 
-async function fetchWindowData(sessionType) {
-  const session = await getLatestSession(sessionType);
+async function fetchWindowData(sessionType, sessionKey) {
+  const session = await resolveSession(sessionType, sessionKey);
   if (!session) throw new Error(`No ${sessionType.toLowerCase()} session found`);
   const [drivers, laps] = await Promise.all([
     getDrivers(session.session_key),
@@ -156,8 +156,8 @@ async function fetchWindowData(sessionType) {
 const DEFAULT_NORMAL_COST = 23;
 const DEFAULT_SC_COST     = 20;
 
-export default function PitWindowPanel({ sessionType = 'Race' }) {
-  const { data, loading, error } = useOpenF1(() => fetchWindowData(sessionType), [sessionType]);
+export default function PitWindowPanel({ sessionType = 'Race', sessionKey = null }) {
+  const { data, loading, error } = useOpenF1(() => fetchWindowData(sessionType, sessionKey), [sessionType, sessionKey]);
 
   const [driverNum,    setDriverNum]    = useState(null);
   const [lapN,         setLapN]         = useState(null);

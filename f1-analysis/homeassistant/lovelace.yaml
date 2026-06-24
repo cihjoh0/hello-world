@@ -1,0 +1,87 @@
+# ── F1 Strategy Lovelace Dashboard ───────────────────────────────────────────
+#
+# Add to a Lovelace view via the UI (Edit Dashboard → Add Card → Manual)
+# or paste into your raw YAML config.
+#
+# Assumes sensors from sensors.yaml are configured:
+#   sensor.f1_session, sensor.f1_pit_window_ver, sensor.f1_pit_window_nor
+
+type: vertical-stack
+cards:
+
+  # Race header
+  - type: entity
+    entity: sensor.f1_session
+    name: Current Race
+    icon: mdi:flag-checkered
+    secondary_info: last-changed
+
+  # Side-by-side driver cards
+  - type: horizontal-stack
+    cards:
+
+      - type: glance
+        title: VER
+        show_name: true
+        show_icon: false
+        entities:
+          - entity: sensor.f1_pit_window_ver
+            name: Window
+          - entity: sensor.f1_pit_window_ver
+            attribute: current_compound
+            name: Tyre
+          - entity: sensor.f1_pit_window_ver
+            attribute: current_lap
+            name: Lap
+          - entity: sensor.f1_pit_window_ver
+            attribute: optimal_pit_lap
+            name: Opt. Lap
+          - entity: sensor.f1_pit_window_ver
+            attribute: deg_rate_s_per_lap
+            name: Deg/lap
+
+      - type: glance
+        title: NOR
+        show_name: true
+        show_icon: false
+        entities:
+          - entity: sensor.f1_pit_window_nor
+            name: Window
+          - entity: sensor.f1_pit_window_nor
+            attribute: current_compound
+            name: Tyre
+          - entity: sensor.f1_pit_window_nor
+            attribute: current_lap
+            name: Lap
+          - entity: sensor.f1_pit_window_nor
+            attribute: optimal_pit_lap
+            name: Opt. Lap
+          - entity: sensor.f1_pit_window_nor
+            attribute: deg_rate_s_per_lap
+            name: Deg/lap
+
+  # Alert card — only shows when VER is in window
+  - type: conditional
+    conditions:
+      - entity: sensor.f1_pit_window_ver
+        state: "open"
+    card:
+      type: markdown
+      content: >
+        ## VER Pit Window OPEN
+        **Optimal lap:** {{ state_attr('sensor.f1_pit_window_ver', 'optimal_pit_lap') }}
+        | **Closes:** lap {{ state_attr('sensor.f1_pit_window_ver', 'pit_window_closes') }}
+        | **Compound:** {{ state_attr('sensor.f1_pit_window_ver', 'current_compound') }}
+
+  # Alert card — only shows when NOR is in window
+  - type: conditional
+    conditions:
+      - entity: sensor.f1_pit_window_nor
+        state: "open"
+    card:
+      type: markdown
+      content: >
+        ## NOR Pit Window OPEN
+        **Optimal lap:** {{ state_attr('sensor.f1_pit_window_nor', 'optimal_pit_lap') }}
+        | **Closes:** lap {{ state_attr('sensor.f1_pit_window_nor', 'pit_window_closes') }}
+        | **Compound:** {{ state_attr('sensor.f1_pit_window_nor', 'current_compound') }}

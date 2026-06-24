@@ -915,3 +915,74 @@
   line-height: 1.5;
   margin: 0;
 }
+
+/* ── Home Assistant tab ────────────────────────────────── */
+.f1-ha-intro {
+  font-size: 12px;
+  color: #aaa;
+  line-height: 1.55;
+  margin: 0 0 1rem;
+}
+
+.f1-ha-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.f1-ha-table th {
+  text-align: left;
+  color: #555;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 10px;
+  padding: 0 8px 6px 0;
+  border-bottom: 1px solid #1e1e2e;
+}
+.f1-ha-table td {
+  padding: 6px 8px 6px 0;
+  border-bottom: 1px solid #1a1a28;
+  color: #ccc;
+  vertical-align: top;
+}
+.f1-ha-table td code {
+  font-size: 10px;
+  color: #e0e0e8;
+  word-break: break-all;
+}
+.f1-ha-interval {
+  white-space: nowrap;
+  color: #555 !important;
+}
+
+.f1-ha-yaml {
+  background: #0a0a12;
+  border: 1px solid #1e1e2e;
+  border-radius: 6px;
+  padding: 12px 14px;
+  font-size: 10px;
+  line-height: 1.6;
+  color: #c0c0d0;
+  overflow-x: auto;
+  white-space: pre;
+  margin: 0;
+}
+
+.f1-ha-status-key {
+  font-size: 11px;
+  color: #888;
+  margin: 1rem 0 0;
+  line-height: 1.8;
+}
+.f1-ha-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+.f1-ha-badge--before  { background: rgba(255,215,0,.12);  color: #ffd700; }
+.f1-ha-badge--open    { background: rgba(57,181,74,.15);  color: #39b54a; }
+.f1-ha-badge--after   { background: rgba(232,0,45,.12);   color: #e8002d; }
+.f1-ha-badge--unknown { background: rgba(136,136,136,.1); color: #666; }

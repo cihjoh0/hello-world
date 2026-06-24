@@ -32,3 +32,20 @@ def latest_race_coords() -> tuple[int, int]:
         return (2024, 24)
     last = completed.iloc[-1]
     return (int(last["year"]) if "year" in last else 2025, int(last["RoundNumber"]))
+
+
+def get_event_info(year: int, round_: int) -> dict:
+    """Return event metadata from the schedule — no full session download needed."""
+    schedule = fastf1.get_event_schedule(year, include_testing=False)
+    row = schedule[schedule["RoundNumber"] == round_]
+    if row.empty:
+        raise ValueError(f"Round {round_} not found in {year} schedule")
+    r = row.iloc[0]
+    return {
+        "year":       year,
+        "round":      round_,
+        "event_name": str(r.get("EventName", "")),
+        "location":   str(r.get("Location", "")),
+        "country":    str(r.get("Country", "")),
+        "date":       str(r.get("EventDate", ""))[:10],
+    }

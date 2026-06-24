@@ -368,12 +368,91 @@ function PitWindowTab({ year, round, drivers, totalLaps }) {
   );
 }
 
+// ── Home Assistant tab ────────────────────────────────────────────────────────
+
+function HomeAssistantTab() {
+  const base = typeof window !== 'undefined' && window.location.hostname !== 'localhost'
+    ? 'http://<analysis-server>:8000'
+    : 'http://localhost:8000';
+
+  const endpoints = [
+    { path: '/ha/ping',          desc: '"ok" — server health check',                      interval: '—'      },
+    { path: '/ha/session',       desc: 'event_name, location, country, date',              interval: '3600 s' },
+    { path: '/ha/driver/{code}', desc: 'compound, deg_rate, window, status, current_lap', interval: '60 s'   },
+  ];
+
+  const sensorSnippet =
+`- platform: rest
+  name: f1_pit_window_ver
+  resource: ${base}/ha/driver/VER
+  scan_interval: 60
+  value_template: "{{ value_json.pit_window_status }}"
+  json_attributes:
+    - current_compound
+    - deg_rate_s_per_lap
+    - optimal_pit_lap
+    - pit_window_opens
+    - pit_window_closes
+    - in_pit_window
+    - current_lap`;
+
+  return (
+    <div className="f1-tab-body">
+      <p className="f1-ha-intro">
+        The analysis server exposes <code>/ha/*</code> endpoints designed for{' '}
+        <strong>Home Assistant REST sensors</strong>. Each driver endpoint returns
+        flat JSON so HA can extract the main state and all strategy attributes
+        with a single poll.
+      </p>
+
+      <table className="f1-ha-table">
+        <thead>
+          <tr>
+            <th>Endpoint</th>
+            <th>HA sensor state / attributes</th>
+            <th>scan_interval</th>
+          </tr>
+        </thead>
+        <tbody>
+          {endpoints.map(e => (
+            <tr key={e.path}>
+              <td><code>{base}{e.path}</code></td>
+              <td>{e.desc}</td>
+              <td className="f1-ha-interval">{e.interval}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <p className="f1-label" style={{ marginTop: '1.25rem', marginBottom: '0.4rem' }}>
+        Example sensor — paste into HA <code>sensors.yaml</code>:
+      </p>
+      <pre className="f1-ha-yaml">{sensorSnippet}</pre>
+
+      <p className="f1-ha-status-key">
+        <strong>pit_window_status</strong> values:{' '}
+        <span className="f1-ha-badge f1-ha-badge--before">before</span>{' '}
+        <span className="f1-ha-badge f1-ha-badge--open">open</span>{' '}
+        <span className="f1-ha-badge f1-ha-badge--after">after</span>{' '}
+        <span className="f1-ha-badge f1-ha-badge--unknown">unknown</span>
+        {' '}— automate on state transitions (e.g. "before" → "open").
+      </p>
+
+      <p className="f1-footnote" style={{ marginTop: '1rem' }}>
+        Full config files in <code>f1-analysis/homeassistant/</code>:{' '}
+        <code>sensors.yaml</code>, <code>automations.yaml</code>, <code>lovelace.yaml</code>.
+      </p>
+    </div>
+  );
+}
+
 // ── Main panel ────────────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: 'deg',      label: 'Degradation' },
-  { id: 'undercut', label: 'Undercut Sim' },
-  { id: 'window',   label: 'Pit Window'  },
+  { id: 'deg',      label: 'Degradation'    },
+  { id: 'undercut', label: 'Undercut Sim'   },
+  { id: 'window',   label: 'Pit Window'     },
+  { id: 'ha',       label: 'Home Assistant' },
 ];
 
 export default function FastF1Panel() {
@@ -398,15 +477,26 @@ export default function FastF1Panel() {
       {status === 'loading' && <LoadingSpinner />}
 
       {status === 'offline' && (
-        <div className="f1-offline">
-          <p className="f1-offline-title">Analysis server not running</p>
-          <code className="f1-offline-cmd">
-            cd f1-analysis &amp;&amp; uvicorn main:app --reload --port 8000
-          </code>
-          <p className="f1-offline-note">
-            Requires the FastF1 Python layer from <code>f1-analysis/</code>
-          </p>
-        </div>
+        <>
+          <div className="f1-offline">
+            <p className="f1-offline-title">Analysis server not running</p>
+            <code className="f1-offline-cmd">
+              cd f1-analysis &amp;&amp; uvicorn main:app --reload --port 8000
+            </code>
+            <p className="f1-offline-note">
+              Requires the FastF1 Python layer from <code>f1-analysis/</code>
+            </p>
+          </div>
+          <div className="f1-tabs" style={{ marginTop: '1rem' }}>
+            <button
+              className={`f1-tab-btn ${activeTab === 'ha' ? 'active' : ''}`}
+              onClick={() => setActiveTab('ha')}
+            >
+              Home Assistant
+            </button>
+          </div>
+          {activeTab === 'ha' && <HomeAssistantTab />}
+        </>
       )}
 
       {status === 'ready' && sessionInfo && (
@@ -434,6 +524,7 @@ export default function FastF1Panel() {
             <PitWindowTab year={coords.year} round={coords.round}
               drivers={sessionInfo.drivers} totalLaps={sessionInfo.total_laps} />
           )}
+          {activeTab === 'ha' && <HomeAssistantTab />}
         </>
       )}
     </DashboardPanel>

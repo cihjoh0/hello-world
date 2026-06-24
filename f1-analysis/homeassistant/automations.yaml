@@ -1,0 +1,65 @@
+# ── F1 Pit Window Automation Examples ────────────────────────────────────────
+#
+# Paste into automations.yaml, or import via the HA UI:
+#   Settings → Automations → ⋮ → Edit in YAML
+#
+# These examples use sensor.f1_pit_window_ver (Verstappen).
+# Duplicate and adjust entity names for other drivers.
+
+# Alert when the pit window opens (state changes from "before" to "open")
+- alias: "F1: VER pit window opens"
+  description: Notify when Verstappen enters his optimal pit window
+  trigger:
+    - platform: state
+      entity_id: sensor.f1_pit_window_ver
+      from: "before"
+      to: "open"
+  action:
+    - service: notify.mobile_app
+      data:
+        title: "F1 Strategy Alert"
+        message: >
+          VER pit window is OPEN!
+          Compound: {{ state_attr('sensor.f1_pit_window_ver', 'current_compound') }}
+          Optimal lap: {{ state_attr('sensor.f1_pit_window_ver', 'optimal_pit_lap') }}
+          Window closes: lap {{ state_attr('sensor.f1_pit_window_ver', 'pit_window_closes') }}
+  mode: single
+
+# Alert 5 laps before the pit window closes
+- alias: "F1: VER window closing in 5 laps"
+  description: Warning when 5 laps remain in VER's pit window
+  trigger:
+    - platform: template
+      value_template: >
+        {% set closes  = state_attr('sensor.f1_pit_window_ver', 'pit_window_closes') | int(0) %}
+        {% set current = state_attr('sensor.f1_pit_window_ver', 'current_lap') | int(0) %}
+        {{ closes > 0 and (closes - current) == 5 }}
+  condition:
+    - condition: state
+      entity_id: sensor.f1_pit_window_ver
+      state: "open"
+  action:
+    - service: notify.mobile_app
+      data:
+        title: "F1 Strategy Warning"
+        message: >
+          VER window closes in 5 laps (lap {{ state_attr('sensor.f1_pit_window_ver', 'pit_window_closes') }})!
+          Current lap: {{ state_attr('sensor.f1_pit_window_ver', 'current_lap') }}
+  mode: single
+
+# Alert if the window closes without a stop (missed the window)
+- alias: "F1: VER missed pit window"
+  description: Alert when VER's pit window closes without them having pitted
+  trigger:
+    - platform: state
+      entity_id: sensor.f1_pit_window_ver
+      from: "open"
+      to: "after"
+  action:
+    - service: notify.mobile_app
+      data:
+        title: "F1 Strategy Alert"
+        message: >
+          VER has missed the pit window!
+          Was optimal on lap {{ state_attr('sensor.f1_pit_window_ver', 'optimal_pit_lap') }}
+  mode: single

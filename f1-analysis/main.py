@@ -20,7 +20,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
-from analysis.session import enable_cache, load_session, latest_race_coords
+from analysis.session import enable_cache, load_session, latest_race_coords, get_event_info
 from analysis.tyre_deg import analyse_degradation
 from analysis.undercut import simulate_undercut, optimal_pit_window
 from analysis.models import DegResponse, UndercutResponse, WindowResponse
@@ -153,6 +153,110 @@ def get_undercut(
         raise HTTPException(status_code=422, detail=f"Simulation error: {e}")
 
     return result
+
+
+# ── Home Assistant endpoints ───────────────────────────────────────────────────
+
+@app.get("/ha/ping")
+def ha_ping():
+    """Lightweight health-check so HA can detect server availability."""
+    return {"status": "ok", "version": "0.1.0"}
+
+
+@app.get("/ha/session")
+def ha_session():
+    """
+    Latest race event metadata using schedule data only — no session download.
+    Recommended HA scan_interval: 3600 s.
+
+    Returns: event_name, location, country, year, round, date.
+    """
+    try:
+        year, round_ = latest_race_coords()
+        return get_event_info(year, round_)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@app.get("/ha/driver/{code}")
+def ha_driver(
+    code: str,
+    pit_duration: float = Query(23.0, description="Assumed pit stop duration (s)"),
+):
+    """
+    Flat JSON for a single driver — designed for HA REST sensors.
+
+    Returns compound, deg rate, pit window boundaries, status, and current lap
+    in a single response so one sensor covers all pit-strategy attributes.
+
+    pit_window_status: "before" | "open" | "after" | "unknown"
+    Recommended HA scan_interval: 60 s during a race.
+    """
+    try:
+        year, round_ = latest_race_coords()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+    try:
+        session = load_session(year, round_, "R")
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Session unavailable: {e}")
+
+    drv = code.upper()
+    driver_laps = session.laps[session.laps["Driver"] == drv].sort_values("LapNumber")
+    if driver_laps.empty:
+        raise HTTPException(status_code=404, detail=f"Driver {drv} not found in session")
+
+    # Current lap + compound from last recorded lap
+    current_lap = int(driver_laps["LapNumber"].max())
+    last_row = driver_laps[driver_laps["LapNumber"] == current_lap]
+    current_compound = (
+        str(last_row["Compound"].iloc[0]) if not last_row.empty else "UNKNOWN"
+    )
+
+    # Deg rate from most recent stint
+    deg_rate: float | None = None
+    try:
+        deg_result = analyse_degradation(session, [drv])
+        if deg_result and deg_result[0].stints:
+            deg_rate = deg_result[0].stints[-1].deg_rate_s_per_lap
+    except Exception:
+        pass
+
+    # Optimal pit window
+    opens = closes = optimal = None
+    try:
+        window = optimal_pit_window(session, drv, pit_duration)
+        opens   = window.window_opens
+        closes  = window.window_closes
+        optimal = window.optimal_lap
+    except Exception:
+        pass
+
+    # Pit window status relative to current lap
+    if opens is None:
+        status = "unknown"
+    elif current_lap < opens:
+        status = "before"
+    elif closes is not None and current_lap > closes:
+        status = "after"
+    else:
+        status = "open"
+
+    return {
+        "driver":             drv,
+        "year":               year,
+        "round":              round_,
+        "current_lap":        current_lap,
+        "current_compound":   current_compound,
+        "deg_rate_s_per_lap": round(deg_rate, 4) if deg_rate is not None else None,
+        "optimal_pit_lap":    optimal,
+        "pit_window_opens":   opens,
+        "pit_window_closes":  closes,
+        "pit_window_status":  status,
+        "in_pit_window":      status == "open",
+        "pit_duration_s":     pit_duration,
+    }
 
 
 @app.get("/analysis/{year}/{round_}/window", response_model=WindowResponse)

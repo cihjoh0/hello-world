@@ -716,3 +716,202 @@
   font-style: italic;
   line-height: 1.5;
 }
+
+/* ── FastF1 Analysis Panel ──────────────────────────────── */
+
+/* Offline state */
+.f1-offline {
+  padding: 24px;
+  text-align: center;
+}
+.f1-offline-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #aaa;
+  margin: 0 0 12px;
+}
+.f1-offline-cmd {
+  display: inline-block;
+  background: #0f0f1c;
+  border: 1px solid #2a2a3a;
+  border-radius: 5px;
+  padding: 8px 16px;
+  font-size: 12px;
+  color: #39b54a;
+  letter-spacing: 0.03em;
+  margin-bottom: 10px;
+}
+.f1-offline-note {
+  font-size: 11px;
+  color: #444;
+  margin: 0;
+}
+
+/* Tab bar */
+.f1-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid #1e1e2e;
+  padding-bottom: 0;
+}
+.f1-tab-btn {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 8px 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #555;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  margin-bottom: -1px;
+}
+.f1-tab-btn:hover   { color: #aaa; }
+.f1-tab-btn.active  { color: #e8002d; border-bottom-color: #e8002d; }
+
+/* Tab body */
+.f1-tab-body { display: flex; flex-direction: column; gap: 14px; }
+
+/* Controls row */
+.f1-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+.f1-row--wrap { flex-wrap: wrap; }
+
+.f1-control {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.f1-control--wide { flex: 1; min-width: 160px; }
+
+.f1-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #555;
+}
+
+.f1-select {
+  background: #1a1a28;
+  border: 1px solid #2a2a3a;
+  border-radius: 4px;
+  color: #e0e0e8;
+  padding: 5px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 700;
+  outline: none;
+  cursor: pointer;
+}
+.f1-select:focus { border-color: #e8002d; }
+
+.f1-btn {
+  padding: 6px 18px;
+  background: #e8002d;
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.15s;
+  align-self: flex-end;
+}
+.f1-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.f1-btn:hover:not(:disabled) { opacity: 0.85; }
+
+.f1-hint {
+  font-size: 10px;
+  color: #444;
+  font-style: italic;
+  align-self: flex-end;
+  padding-bottom: 7px;
+}
+.f1-error {
+  font-size: 12px;
+  color: #f87171;
+  margin: 0;
+  background: #1f1015;
+  border: 1px solid #5c1a20;
+  border-radius: 4px;
+  padding: 8px 12px;
+}
+
+/* Stint selector (Degradation tab) */
+.f1-stint-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.f1-stint-btn {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border: 1px solid var(--cc, #444);
+  border-radius: 4px;
+  background: transparent;
+  color: #666;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.f1-stint-btn.active {
+  background: var(--cc, #444);
+  color: #0d0d14;
+}
+
+/* Stint metadata row */
+.f1-stint-meta {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+/* Summary row (Undercut / Window tabs) */
+.f1-summary-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+
+/* Shared stat cell */
+.f1-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+}
+.f1-stat span:first-child { color: #555; }
+.f1-stat strong { color: #e0e0e8; font-size: 13px; }
+.f1-stat strong.pos { color: #39b54a; }
+.f1-stat strong.neg { color: #e8002d; }
+
+/* Verdict chip */
+.f1-verdict {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 4px 12px;
+  border-radius: 4px;
+}
+.f1-verdict--good { background: rgba(57,181,74,.15); color: #39b54a; }
+.f1-verdict--bad  { background: rgba(232,0,45,.15);  color: #e8002d; }
+
+.f1-footnote {
+  font-size: 10px;
+  color: #3a3a4a;
+  font-style: italic;
+  line-height: 1.5;
+  margin: 0;
+}

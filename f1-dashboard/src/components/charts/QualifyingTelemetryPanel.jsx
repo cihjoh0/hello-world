@@ -4,7 +4,7 @@ import {
   Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
 import {
-  resolveSession, getQualifyingSession, getDrivers, getLaps, getCarData,
+  resolveSession, getQualifyingSession, getDrivers, getLaps, getCarData, getLocation,
 } from '../../api/openf1';
 import DashboardPanel from '../dashboard/DashboardPanel';
 import LoadingSpinner from '../ui/LoadingSpinner';
@@ -85,6 +85,67 @@ function interpElapsed(telDist, targetDist) {
   return a.elapsed + frac * (b.elapsed - a.elapsed);
 }
 
+// Extract GPS points for a specific lap window
+function extractLapLocation(rawLoc, lap) {
+  if (!lap?.date_start || !lap?.lap_duration) return [];
+  const t0 = new Date(lap.date_start).getTime();
+  const t1 = t0 + lap.lap_duration * 1000;
+  return rawLoc
+    .filter(d => { const t = new Date(d.date).getTime(); return t >= t0 && t <= t1; })
+    .map(d => ({ x: d.x ?? 0, y: d.y ?? 0 }));
+}
+
+// Add cumulative Euclidean distance to a GPS path
+function buildTrackPath(loc) {
+  if (!loc.length) return [];
+  const out = [{ ...loc[0], dist: 0 }];
+  for (let i = 1; i < loc.length; i++) {
+    const dx = loc[i].x - loc[i - 1].x, dy = loc[i].y - loc[i - 1].y;
+    out.push({ ...loc[i], dist: out[i - 1].dist + Math.sqrt(dx * dx + dy * dy) });
+  }
+  return out;
+}
+
+// gap > 0 = behind reference (red), gap < 0 = ahead (green)
+function gapColor(gap, maxGap) {
+  const t = Math.max(-1, Math.min(1, gap / Math.max(maxGap, 0.05)));
+  if (t >= 0) return `rgba(220,${Math.round(220 * (1 - t))},${Math.round(220 * (1 - t))},0.9)`;
+  return `rgba(${Math.round(220 * (1 + t))},220,${Math.round(220 * (1 + t))},0.9)`;
+}
+
+function CircuitMap({ path, segs, refCode, cmpCode }) {
+  const W = 380, H = 220, PAD = 16;
+  const xs = path.map(p => p.x), ys = path.map(p => p.y);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs);
+  const y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const sx = (W - 2 * PAD) / Math.max(x1 - x0, 1);
+  const sy = (H - 2 * PAD) / Math.max(y1 - y0, 1);
+  const sc = Math.min(sx, sy);
+  const ox = PAD + ((W - 2 * PAD) - (x1 - x0) * sc) / 2;
+  const oy = PAD + ((H - 2 * PAD) - (y1 - y0) * sc) / 2;
+  const px = x => (ox + (x - x0) * sc).toFixed(1);
+  const py = y => (H - oy - (y - y0) * sc).toFixed(1); // flip Y axis
+
+  const outline = path.map(p => `${px(p.x)},${py(p.y)}`).join(' ');
+
+  return (
+    <div style={{ marginTop: '0.75rem' }}>
+      <svg width={W} height={H} style={{ display: 'block', margin: '0 auto', borderRadius: 8, background: '#0d0d14' }}>
+        <polyline points={outline} fill="none" stroke="#1e1e2e" strokeWidth={8} strokeLinecap="round" strokeLinejoin="round" />
+        {segs.map((s, i) => (
+          <line key={i} x1={px(s.x1)} y1={py(s.y1)} x2={px(s.x2)} y2={py(s.y2)}
+            stroke={s.color} strokeWidth={3} strokeLinecap="round" />
+        ))}
+        <circle cx={px(path[0].x)} cy={py(path[0].y)} r={5} fill="#fff" opacity={0.5} />
+      </svg>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: '1.5rem', fontSize: 10, color: '#888', marginTop: 4 }}>
+        <span><span style={{ color: '#39b54a' }}>■</span> {refCode} faster</span>
+        <span><span style={{ color: '#e8002d' }}>■</span> {cmpCode} faster</span>
+      </div>
+    </div>
+  );
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function QualifyingTelemetryPanel({ sessionType = 'Race', sessionKey = null }) {
@@ -96,6 +157,7 @@ export default function QualifyingTelemetryPanel({ sessionType = 'Race', session
 
   const [selected,    setSelected]      = useState([]);
   const [telemetry,   setTelemetry]     = useState({});
+  const [locData,     setLocData]       = useState({});
   const [telLoading,  setTelLoading]    = useState({});
   const [activeTab,   setActiveTab]     = useState('Speed');
 
@@ -108,6 +170,7 @@ export default function QualifyingTelemetryPanel({ sessionType = 'Race', session
     setFastestLaps({});
     setSelected([]);
     setTelemetry({});
+    setLocData({});
     setTelLoading({});
 
     (async () => {
@@ -155,11 +218,17 @@ export default function QualifyingTelemetryPanel({ sessionType = 'Race', session
     if (!qualSession || telemetry[driverNum] !== undefined || telLoading[driverNum]) return;
     setTelLoading(prev => ({ ...prev, [driverNum]: true }));
     try {
-      const carData = await getCarData(qualSession.session_key, driverNum);
-      const points  = extractLapTelemetry(carData, fastestLaps[driverNum]);
+      const [carData, rawLoc] = await Promise.all([
+        getCarData(qualSession.session_key, driverNum),
+        getLocation(qualSession.session_key, driverNum),
+      ]);
+      const points = extractLapTelemetry(carData, fastestLaps[driverNum]);
+      const loc    = buildTrackPath(extractLapLocation(rawLoc, fastestLaps[driverNum]));
       setTelemetry(prev => ({ ...prev, [driverNum]: points }));
+      setLocData(prev => ({ ...prev, [driverNum]: loc }));
     } catch {
       setTelemetry(prev => ({ ...prev, [driverNum]: [] }));
+      setLocData(prev => ({ ...prev, [driverNum]: [] }));
     } finally {
       setTelLoading(prev => ({ ...prev, [driverNum]: false }));
     }
@@ -246,6 +315,36 @@ export default function QualifyingTelemetryPanel({ sessionType = 'Race', session
     }
     return points;
   }, [selected, telemetry, telWithDist, activeTab]);
+
+  // Circuit map: reference driver's GPS path colored by delta vs 2nd driver
+  const circuitMapData = useMemo(() => {
+    if (activeTab !== 'Δ Time' || chartData.length === 0) return null;
+    const selNums = selected.filter(n => locData[n]?.length > 0);
+    if (selNums.length < 2) return null;
+
+    const refNum  = selNums[0];
+    const cmpNum  = selNums[1];
+    const cmpIdx  = selected.indexOf(cmpNum);
+    const refPath = locData[refNum];
+    if (!refPath?.length) return null;
+
+    const gpsTotal   = refPath.at(-1).dist;
+    const speedTotal = chartData.at(-1)?.dist ?? 1;
+    const maxAbsDelta = Math.max(...chartData.map(r => Math.abs(r[`d${cmpIdx}`] ?? 0)), 0.05);
+
+    const segs = refPath.slice(0, -1).map((pt, i) => {
+      const next  = refPath[i + 1];
+      const target = (pt.dist / gpsTotal) * speedTotal;
+      let lo = 0, hi = chartData.length - 1;
+      while (lo < hi) { const mid = (lo + hi) >> 1; chartData[mid].dist < target ? (lo = mid + 1) : (hi = mid); }
+      const gap = chartData[lo]?.[`d${cmpIdx}`] ?? 0;
+      return { x1: pt.x, y1: pt.y, x2: next.x, y2: next.y, color: gapColor(gap, maxAbsDelta) };
+    });
+
+    const refDrv = drivers.find(d => d.driver_number === refNum);
+    const cmpDrv = drivers.find(d => d.driver_number === cmpNum);
+    return { path: refPath, segs, refCode: refDrv?.name_acronym ?? refNum, cmpCode: cmpDrv?.name_acronym ?? cmpNum };
+  }, [activeTab, chartData, selected, locData, drivers]);
 
   // ── Render ──
   const subtitle = qualSession
@@ -374,6 +473,11 @@ export default function QualifyingTelemetryPanel({ sessionType = 'Race', session
             <p className="f1-hint" style={{ padding: '1rem', textAlign: 'center' }}>
               No telemetry data available for this session.
             </p>
+          )}
+
+          {isDelta && circuitMapData && (
+            <CircuitMap path={circuitMapData.path} segs={circuitMapData.segs}
+              refCode={circuitMapData.refCode} cmpCode={circuitMapData.cmpCode} />
           )}
 
           <p className="f1-footnote" style={{ marginTop: '0.5rem' }}>

@@ -81,3 +81,14 @@ export async function getPitStops(sessionKey) {
 export async function getPositions(sessionKey) {
   return listGet('/position', { session_key: sessionKey });
 }
+
+// Qualifying session for a given meeting (same race weekend).
+export async function getQualifyingSession(meetingKey) {
+  const data = await listGet('/sessions', { meeting_key: meetingKey, session_type: 'Qualifying' });
+  return data[0] ?? null;
+}
+
+// Raw car telemetry for one driver in a session (~3.7 Hz: speed, throttle, brake, gear, rpm).
+export async function getCarData(sessionKey, driverNumber) {
+  return listGet('/car_data', { session_key: sessionKey, driver_number: driverNumber });
+}

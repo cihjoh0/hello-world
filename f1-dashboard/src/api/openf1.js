@@ -92,3 +92,8 @@ export async function getQualifyingSession(meetingKey) {
 export async function getCarData(sessionKey, driverNumber) {
   return listGet('/car_data', { session_key: sessionKey, driver_number: driverNumber });
 }
+
+// GPS position for one driver (x/y in metres, track Cartesian coordinate system).
+export async function getLocation(sessionKey, driverNumber) {
+  return listGet('/location', { session_key: sessionKey, driver_number: driverNumber });
+}

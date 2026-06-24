@@ -4,7 +4,7 @@ import {
   Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
 import { useOpenF1 } from '../../hooks/useOpenF1';
-import { resolveSession, getDrivers, getLaps } from '../../api/openf1';
+import { resolveSession, getDrivers, getLaps, getPitStops } from '../../api/openf1';
 import DashboardPanel from '../dashboard/DashboardPanel';
 import LoadingSpinner from '../ui/LoadingSpinner';
 import ErrorMessage from '../ui/ErrorMessage';
@@ -14,11 +14,12 @@ const DEFAULT_SHOWN = 8;
 async function fetchData(sessionType, sessionKey) {
   const session = await resolveSession(sessionType, sessionKey);
   if (!session) throw new Error(`No ${sessionType.toLowerCase()} session found`);
-  const [drivers, laps] = await Promise.all([
+  const [drivers, laps, pitStops] = await Promise.all([
     getDrivers(session.session_key),
     getLaps(session.session_key),
+    getPitStops(session.session_key),
   ]);
-  return { session, drivers, laps };
+  return { session, drivers, laps, pitStops };
 }
 
 export default function RaceGapChart({ sessionType = 'Race', sessionKey = null }) {
@@ -29,9 +30,9 @@ export default function RaceGapChart({ sessionType = 'Race', sessionKey = null }
 
   const [selected, setSelected] = useState(null); // null = default top-N
 
-  const { chartData, driverRows, subtitle } = useMemo(() => {
+  const { chartData, driverRows, pitSet, subtitle } = useMemo(() => {
     if (!data) return {};
-    const { session, drivers, laps } = data;
+    const { session, drivers, laps, pitStops } = data;
     const driverMap = Object.fromEntries(drivers.map(d => [d.driver_number, d]));
 
     // Build { driverNum: { lapNum: duration } }
@@ -87,10 +88,16 @@ export default function RaceGapChart({ sessionType = 'Race', sessionKey = null }
       return { num, drv, rank: i + 1, color, isDashed: dash };
     });
 
+    // Pit stop lookup: "driverNum-lapNum"
+    const pitSet = new Set(
+      (pitStops ?? []).map(p => `${p.driver_number}-${p.lap_number}`)
+    );
+
     const s = session;
     return {
       chartData,
       driverRows,
+      pitSet,
       subtitle: s ? `${s.location ?? ''} · ${s.year ?? ''} · Round ${s.round_number ?? '?'}` : undefined,
     };
   }, [data]);
@@ -162,7 +169,13 @@ export default function RaceGapChart({ sessionType = 'Race', sessionKey = null }
                   dataKey={`d${num}`}
                   name={drv.name_acronym ?? num}
                   stroke={color}
-                  dot={false}
+                  dot={({ cx, cy, payload }) =>
+                    pitSet?.has(`${num}-${payload.lap}`)
+                      ? <circle key={`pit-${num}-${payload.lap}`} cx={cx} cy={cy} r={4}
+                          fill={color} stroke="#0d0d14" strokeWidth={1.5} />
+                      : <g key={`np-${num}-${payload.lap}`} />
+                  }
+                  activeDot={{ r: 3, fill: color }}
                   strokeWidth={1.5}
                   strokeDasharray={isDashed ? '5 3' : undefined}
                   connectNulls={false}
@@ -173,8 +186,8 @@ export default function RaceGapChart({ sessionType = 'Race', sessionKey = null }
           </ResponsiveContainer>
 
           <p className="f1-footnote" style={{ marginTop: '0.5rem' }}>
-            Cumulative gap to the race leader at each lap crossing. Pit stops show as upward spikes.
-            Dashed lines = teammate.
+            Cumulative gap to the race leader at each lap crossing. Filled circles mark pit stops;
+            the upward spike is the in-lap time. Dashed lines = teammate.
           </p>
         </>
       )}

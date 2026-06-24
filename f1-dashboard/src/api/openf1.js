@@ -4,45 +4,37 @@ const BASE_URL = 'https://api.openf1.org/v1';
 
 const client = axios.create({ baseURL: BASE_URL });
 
+async function listGet(path, params = {}) {
+  try {
+    const { data } = await client.get(path, { params });
+    return Array.isArray(data) ? data : [];
+  } catch (err) {
+    if (err.response?.status === 404) return [];
+    throw err;
+  }
+}
+
 export async function getLatestSession(sessionType = 'Race') {
-  const { data } = await client.get('/sessions', {
-    params: { session_type: sessionType },
-  });
-  // API returns sessions sorted ascending; take the last one
+  const data = await listGet('/sessions', { session_type: sessionType });
   return data[data.length - 1] ?? null;
 }
 
 export async function getDrivers(sessionKey) {
-  const { data } = await client.get('/drivers', {
-    params: { session_key: sessionKey },
-  });
-  return data;
+  return listGet('/drivers', { session_key: sessionKey });
 }
 
 export async function getLaps(sessionKey) {
-  const { data } = await client.get('/laps', {
-    params: { session_key: sessionKey },
-  });
-  return data;
+  return listGet('/laps', { session_key: sessionKey });
 }
 
 export async function getStints(sessionKey) {
-  const { data } = await client.get('/stints', {
-    params: { session_key: sessionKey },
-  });
-  return data;
+  return listGet('/stints', { session_key: sessionKey });
 }
 
 export async function getPitStops(sessionKey) {
-  const { data } = await client.get('/pit', {
-    params: { session_key: sessionKey },
-  });
-  return data;
+  return listGet('/pit', { session_key: sessionKey });
 }
 
 export async function getPositions(sessionKey) {
-  const { data } = await client.get('/position', {
-    params: { session_key: sessionKey },
-  });
-  return data;
+  return listGet('/position', { session_key: sessionKey });
 }

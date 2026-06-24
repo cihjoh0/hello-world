@@ -3,6 +3,7 @@ import TireStrategyChart from '../charts/TireStrategyChart';
 import PaceAnalysisPanel from '../charts/PaceAnalysisPanel';
 import PitWindowPanel from '../charts/PitWindowPanel';
 import FastF1Panel from '../charts/FastF1Panel';
+import QualifyingTelemetryPanel from '../charts/QualifyingTelemetryPanel';
 
 export default function Dashboard({ sessionType = 'Race', sessionKey = null }) {
   return (
@@ -11,6 +12,7 @@ export default function Dashboard({ sessionType = 'Race', sessionKey = null }) {
       <TireStrategyChart sessionType={sessionType} sessionKey={sessionKey} />
       <PaceAnalysisPanel sessionType={sessionType} sessionKey={sessionKey} />
       <PitWindowPanel sessionType={sessionType} sessionKey={sessionKey} />
+      <QualifyingTelemetryPanel sessionType={sessionType} sessionKey={sessionKey} />
       <FastF1Panel sessionType={sessionType} />
     </div>
   );

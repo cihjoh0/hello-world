@@ -984,6 +984,56 @@
 .f1-verdict--good { background: rgba(57,181,74,.15); color: #39b54a; }
 .f1-verdict--bad  { background: rgba(232,0,45,.15);  color: #e8002d; }
 
+/* ── Qualifying Telemetry Panel ──────────────────────────────────────────── */
+.qt-driver-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.qt-driver-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #0d0d14;
+  border: 1px solid #2a2a3e;
+  border-radius: 6px;
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: border-color 0.15s, opacity 0.15s;
+  position: relative;
+}
+.qt-driver-btn::before {
+  content: '';
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dot, transparent);
+  border: 1px solid #444;
+  flex-shrink: 0;
+}
+.qt-driver-btn.active { border-color: var(--dot); }
+.qt-driver-btn:disabled { opacity: 0.35; cursor: default; }
+
+.qt-rank {
+  font-size: 10px;
+  color: #555;
+  min-width: 18px;
+}
+.qt-code {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.qt-time {
+  font-size: 11px;
+  color: #888;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── ─────────────────────────────────────────────────────────────────────── */
 .f1-footnote {
   font-size: 10px;
   color: #3a3a4a;

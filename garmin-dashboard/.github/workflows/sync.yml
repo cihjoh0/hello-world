@@ -1,0 +1,37 @@
+name: Sync Garmin Data
+
+on:
+  schedule:
+    # Runs nightly at 03:00 UTC
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r garmin-dashboard/backend/requirements.txt
+
+      - name: Restore garth session
+        run: |
+          mkdir -p ~/.garth
+          echo "${{ secrets.GARTH_SESSION }}" | base64 -d > ~/.garth/oauth2_token
+
+      - name: Sync activities
+        run: python garmin-dashboard/backend/fetch.py --limit 500
+        working-directory: ${{ github.workspace }}
+
+      - name: Commit updated database
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add garmin-dashboard/backend/garmin.db
+          git diff --cached --quiet || git commit -m "chore: nightly Garmin sync $(date -u +%Y-%m-%d)"
+          git push

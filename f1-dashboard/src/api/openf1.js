@@ -10,20 +10,43 @@ const client = axios.create({ baseURL: BASE_URL });
 const cache = new Map();
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
+// Global concurrency limiter — cap in-flight HTTP requests to avoid 429s.
+// With ~30 panels loading simultaneously on mount, uncapped requests exhaust
+// the OpenF1 rate limit faster than exponential backoff can recover.
+const MAX_CONCURRENT = 4;
+let _active = 0;
+const _queue = [];
+
+function withConcurrencyLimit(fn) {
+  return new Promise((resolve, reject) => {
+    const run = () => {
+      _active++;
+      Promise.resolve()
+        .then(fn)
+        .then(
+          v => { _active--; if (_queue.length) _queue.shift()(); resolve(v); },
+          e => { _active--; if (_queue.length) _queue.shift()(); reject(e); }
+        );
+    };
+    if (_active < MAX_CONCURRENT) run();
+    else _queue.push(run);
+  });
+}
+
 function cacheKey(path, params) {
   return path + '?' + new URLSearchParams(params).toString();
 }
 
-async function fetchWithRetry(path, params, retries = 3) {
+async function fetchWithRetry(path, params, retries = 4) {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const { data } = await client.get(path, { params });
+      const { data } = await withConcurrencyLimit(() => client.get(path, { params }));
       return Array.isArray(data) ? data : [];
     } catch (err) {
       const status = err.response?.status;
       if (status === 404) return [];
       if (status === 429 && attempt < retries) {
-        // Exponential backoff: 1s, 2s, 4s
+        // Exponential backoff: 1s, 2s, 4s, 8s
         await new Promise(r => setTimeout(r, 1000 * 2 ** attempt));
         continue;
       }

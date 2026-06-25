@@ -6,10 +6,14 @@ import FastF1Panel from '../charts/FastF1Panel';
 import QualifyingTelemetryPanel from '../charts/QualifyingTelemetryPanel';
 import RaceGapChart from '../charts/RaceGapChart';
 import BattleTracker from '../charts/BattleTracker';
+import PositionChart from '../charts/PositionChart';
+import WeekendPacePanel from '../charts/WeekendPacePanel';
 
 export default function Dashboard({ sessionType = 'Race', sessionKey = null }) {
   return (
     <div className="dashboard">
+      <WeekendPacePanel sessionType={sessionType} sessionKey={sessionKey} />
+      <PositionChart sessionType={sessionType} sessionKey={sessionKey} />
       <RaceGapChart sessionType={sessionType} sessionKey={sessionKey} />
       <BattleTracker sessionType={sessionType} sessionKey={sessionKey} />
       <LapTimeChart sessionType={sessionType} sessionKey={sessionKey} />

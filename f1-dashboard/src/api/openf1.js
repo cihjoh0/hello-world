@@ -93,6 +93,14 @@ export async function getMeetingSessions(meetingKey) {
   return listGet('/sessions', { meeting_key: meetingKey });
 }
 
+export async function getWeather(sessionKey) {
+  return listGet('/weather', { session_key: sessionKey });
+}
+
+export async function getRaceControl(sessionKey) {
+  return listGet('/race_control', { session_key: sessionKey });
+}
+
 // Raw car telemetry for one driver in a session (~3.7 Hz: speed, throttle, brake, gear, rpm).
 export async function getCarData(sessionKey, driverNumber) {
   return listGet('/car_data', { session_key: sessionKey, driver_number: driverNumber });

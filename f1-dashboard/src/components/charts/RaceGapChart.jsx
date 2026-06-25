@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  Legend, ResponsiveContainer, ReferenceLine,
+  Legend, ResponsiveContainer, ReferenceLine, ReferenceArea,
 } from 'recharts';
 import { useOpenF1 } from '../../hooks/useOpenF1';
-import { resolveSession, getDrivers, getLaps, getPitStops } from '../../api/openf1';
+import { resolveSession, getDrivers, getLaps, getPitStops, getRaceControl } from '../../api/openf1';
 import DashboardPanel from '../dashboard/DashboardPanel';
 import LoadingSpinner from '../ui/LoadingSpinner';
 import ErrorMessage from '../ui/ErrorMessage';
@@ -14,12 +14,13 @@ const DEFAULT_SHOWN = 8;
 async function fetchData(sessionType, sessionKey) {
   const session = await resolveSession(sessionType, sessionKey);
   if (!session) throw new Error(`No ${sessionType.toLowerCase()} session found`);
-  const [drivers, laps, pitStops] = await Promise.all([
+  const [drivers, laps, pitStops, raceControl] = await Promise.all([
     getDrivers(session.session_key),
     getLaps(session.session_key),
     getPitStops(session.session_key),
+    getRaceControl(session.session_key),
   ]);
-  return { session, drivers, laps, pitStops };
+  return { session, drivers, laps, pitStops, raceControl };
 }
 
 export default function RaceGapChart({ sessionType = 'Race', sessionKey = null }) {
@@ -30,9 +31,9 @@ export default function RaceGapChart({ sessionType = 'Race', sessionKey = null }
 
   const [selected, setSelected] = useState(null); // null = default top-N
 
-  const { chartData, driverRows, pitSet, subtitle } = useMemo(() => {
+  const { chartData, driverRows, pitSet, safetyCarPeriods, subtitle } = useMemo(() => {
     if (!data) return {};
-    const { session, drivers, laps, pitStops } = data;
+    const { session, drivers, laps, pitStops, raceControl } = data;
     const driverMap = Object.fromEntries(drivers.map(d => [d.driver_number, d]));
 
     // Build { driverNum: { lapNum: duration } }
@@ -93,11 +94,35 @@ export default function RaceGapChart({ sessionType = 'Race', sessionKey = null }
       (pitStops ?? []).map(p => `${p.driver_number}-${p.lap_number}`)
     );
 
+    // Parse SC/VSC periods from race control messages
+    const safetyCarPeriods = [];
+    if (raceControl?.length) {
+      let scStart = null, vscStart = null;
+      const rcSorted = [...raceControl].sort((a, b) => (a.lap_number ?? 0) - (b.lap_number ?? 0));
+      for (const rc of rcSorted) {
+        const flag = (rc.flag ?? '').toUpperCase();
+        const lap = rc.lap_number;
+        if (!lap) continue;
+        if (flag.includes('VSC DEPLOYED')) { vscStart = lap; }
+        else if (flag.includes('VSC ENDING') && vscStart != null) {
+          safetyCarPeriods.push({ type: 'VSC', start: vscStart, end: lap });
+          vscStart = null;
+        } else if (flag.includes('SC DEPLOYED')) { scStart = lap; }
+        else if (flag.includes('SC ENDING') && scStart != null) {
+          safetyCarPeriods.push({ type: 'SC', start: scStart, end: lap });
+          scStart = null;
+        }
+      }
+      if (scStart  != null) safetyCarPeriods.push({ type: 'SC',  start: scStart,  end: maxLap });
+      if (vscStart != null) safetyCarPeriods.push({ type: 'VSC', start: vscStart, end: maxLap });
+    }
+
     const s = session;
     return {
       chartData,
       driverRows,
       pitSet,
+      safetyCarPeriods,
       subtitle: s ? `${s.location ?? ''} · ${s.year ?? ''} · Round ${s.round_number ?? '?'}` : undefined,
     };
   }, [data]);
@@ -163,6 +188,16 @@ export default function RaceGapChart({ sessionType = 'Race', sessionKey = null }
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <ReferenceLine y={0} stroke="#555" strokeDasharray="4 2"
                 label={{ value: 'Leader', position: 'insideTopRight', fill: '#555', fontSize: 9 }} />
+              {(safetyCarPeriods ?? []).map((p, i) => (
+                <ReferenceArea
+                  key={`sc-${i}`}
+                  x1={p.start} x2={p.end}
+                  fill={p.type === 'SC' ? 'rgba(255,215,0,0.08)' : 'rgba(0,160,221,0.08)'}
+                  stroke={p.type === 'SC' ? 'rgba(255,215,0,0.3)' : 'rgba(0,160,221,0.3)'}
+                  strokeWidth={1}
+                  label={{ value: p.type, position: 'insideTop', fill: p.type === 'SC' ? '#ffd700' : '#00a0dd', fontSize: 9 }}
+                />
+              ))}
               {activeRows.map(({ num, drv, color, isDashed }) => (
                 <Line
                   key={num}

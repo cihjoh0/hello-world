@@ -88,6 +88,11 @@ export async function getQualifyingSession(meetingKey) {
   return data[0] ?? null;
 }
 
+// All sessions for a given meeting (practice, qualifying, race, sprint, etc.).
+export async function getMeetingSessions(meetingKey) {
+  return listGet('/sessions', { meeting_key: meetingKey });
+}
+
 // Raw car telemetry for one driver in a session (~3.7 Hz: speed, throttle, brake, gear, rpm).
 export async function getCarData(sessionKey, driverNumber) {
   return listGet('/car_data', { session_key: sessionKey, driver_number: driverNumber });

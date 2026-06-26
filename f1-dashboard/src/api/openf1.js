@@ -77,12 +77,24 @@ export async function getSessions(year, sessionType = 'Race') {
 }
 
 // Returns a specific session by key, or the latest of sessionType as fallback.
+// Annotates the result with a derived round_number (position in the year's
+// session list, sorted by date) since the OpenF1 API doesn't return that field.
 export async function resolveSession(sessionType, sessionKey = null) {
+  let session;
   if (sessionKey) {
     const data = await listGet('/sessions', { session_key: sessionKey });
-    return data[0] ?? null;
+    session = data[0] ?? null;
+  } else {
+    session = await getLatestSession(sessionType);
   }
-  return getLatestSession(sessionType);
+  if (!session) return null;
+
+  // Derive round number from the session's position within its year.
+  // getSessions result is already cached by App on mount, so no extra request.
+  const allSessions = await getSessions(session.year, session.session_type);
+  const sorted = [...allSessions].sort((a, b) => new Date(a.date_start) - new Date(b.date_start));
+  const idx = sorted.findIndex(s => s.session_key === session.session_key);
+  return idx >= 0 ? { ...session, round_number: idx + 1 } : session;
 }
 
 export async function getDrivers(sessionKey) {

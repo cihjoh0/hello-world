@@ -159,6 +159,8 @@ export default function QualifyingTelemetryPanel({ sessionType = 'Race', session
   const [telemetry,   setTelemetry]     = useState({});
   const [locData,     setLocData]       = useState({});
   const [telLoading,  setTelLoading]    = useState({});
+  const [telError,    setTelError]      = useState({});
+  const [retryKey,    setRetryKey]      = useState(0);
   const [activeTab,   setActiveTab]     = useState('Speed');
 
   // ── Phase 1: resolve qualifying session + fastest laps ──
@@ -172,6 +174,7 @@ export default function QualifyingTelemetryPanel({ sessionType = 'Race', session
     setTelemetry({});
     setLocData({});
     setTelLoading({});
+    setTelError({});
 
     (async () => {
       try {
@@ -188,10 +191,10 @@ export default function QualifyingTelemetryPanel({ sessionType = 'Race', session
         ]);
         setDrivers(drvs);
 
-        // Fastest lap per driver
+        // Fastest lap per driver — require date_start so telemetry can be extracted
         const best = {};
         for (const lap of laps) {
-          if (!lap.lap_duration || lap.lap_duration <= 0) continue;
+          if (!lap.lap_duration || lap.lap_duration <= 0 || !lap.date_start) continue;
           const num = lap.driver_number;
           if (!best[num] || lap.lap_duration < best[num].lap_duration) {
             best[num] = lap;
@@ -217,6 +220,7 @@ export default function QualifyingTelemetryPanel({ sessionType = 'Race', session
   const fetchTelForDriver = useCallback(async (driverNum) => {
     if (!qualSession || telemetry[driverNum] !== undefined || telLoading[driverNum]) return;
     setTelLoading(prev => ({ ...prev, [driverNum]: true }));
+    setTelError(prev => { const n = { ...prev }; delete n[driverNum]; return n; });
     try {
       const [carData, rawLoc] = await Promise.all([
         getCarData(qualSession.session_key, driverNum),
@@ -224,9 +228,13 @@ export default function QualifyingTelemetryPanel({ sessionType = 'Race', session
       ]);
       const points = extractLapTelemetry(carData, fastestLaps[driverNum]);
       const loc    = buildTrackPath(extractLapLocation(rawLoc, fastestLaps[driverNum]));
+      if (points.length === 0) {
+        setTelError(prev => ({ ...prev, [driverNum]: 'No car data returned by API' }));
+      }
       setTelemetry(prev => ({ ...prev, [driverNum]: points }));
       setLocData(prev => ({ ...prev, [driverNum]: loc }));
-    } catch {
+    } catch (e) {
+      setTelError(prev => ({ ...prev, [driverNum]: e?.message ?? 'Failed to load' }));
       setTelemetry(prev => ({ ...prev, [driverNum]: [] }));
       setLocData(prev => ({ ...prev, [driverNum]: [] }));
     } finally {
@@ -236,7 +244,7 @@ export default function QualifyingTelemetryPanel({ sessionType = 'Race', session
 
   useEffect(() => {
     for (const num of selected) fetchTelForDriver(num);
-  }, [selected]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selected, retryKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleDriver = (num) => {
     setSelected(prev =>
@@ -244,6 +252,14 @@ export default function QualifyingTelemetryPanel({ sessionType = 'Race', session
         ? prev.filter(n => n !== num)
         : prev.length < MAX_DRIVERS ? [...prev, num] : prev
     );
+  };
+
+  const retryTelemetry = () => {
+    setTelemetry({});
+    setLocData({});
+    setTelLoading({});
+    setTelError({});
+    setRetryKey(k => k + 1);
   };
 
   // ── Derived data ──
@@ -433,7 +449,7 @@ export default function QualifyingTelemetryPanel({ sessionType = 'Race', session
 
           {anyTelLoading && (
             <p className="f1-hint" style={{ padding: '0.5rem 0' }}>
-              Loading telemetry… (may take a few seconds)
+              Loading telemetry… this may take several seconds while other panels load.
             </p>
           )}
 
@@ -508,8 +524,8 @@ export default function QualifyingTelemetryPanel({ sessionType = 'Race', session
             </div>
           )}
 
-          {/* Chart */}
-          {activeTab !== 'Sectors' && !anyTelLoading && chartData.length > 0 && (
+          {/* Chart — shown as soon as any driver's telemetry is available */}
+          {activeTab !== 'Sectors' && chartData.length > 0 && (
             <ResponsiveContainer width="100%" height={260}>
               <LineChart data={chartData} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" />
@@ -558,10 +574,21 @@ export default function QualifyingTelemetryPanel({ sessionType = 'Race', session
             </ResponsiveContainer>
           )}
 
-          {activeTab !== 'Sectors' && !anyTelLoading && chartData.length === 0 && (
-            <p className="f1-hint" style={{ padding: '1rem', textAlign: 'center' }}>
-              No telemetry data available for this session.
-            </p>
+          {activeTab !== 'Sectors' && !anyTelLoading && chartData.length === 0 && selected.length > 0 && (
+            <div style={{ padding: '1rem', textAlign: 'center' }}>
+              {Object.values(telError).length > 0 ? (
+                <p className="f1-hint">
+                  Failed to load car telemetry: {Object.values(telError)[0]}
+                </p>
+              ) : (
+                <p className="f1-hint">
+                  No car telemetry data available for this qualifying session.
+                </p>
+              )}
+              <button className="stories-btn" style={{ marginTop: '0.5rem' }} onClick={retryTelemetry}>
+                Retry
+              </button>
+            </div>
           )}
 
           {isDelta && circuitMapData && (

@@ -10,7 +10,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { useOpenF1 } from '../../hooks/useOpenF1';
-import { resolveSession, getDrivers, getLaps } from '../../api/openf1';
+import { resolveSession, getDrivers, getLaps, getPositions } from '../../api/openf1';
 import DashboardPanel from '../dashboard/DashboardPanel';
 import LoadingSpinner from '../ui/LoadingSpinner';
 import ErrorMessage from '../ui/ErrorMessage';
@@ -42,11 +42,12 @@ const COLORS = [
 async function fetchRaceData(sessionType, sessionKey) {
   const session = await resolveSession(sessionType, sessionKey);
   if (!session) throw new Error(`No ${sessionType.toLowerCase()} session found`);
-  const [drivers, laps] = await Promise.all([
+  const [drivers, laps, positions] = await Promise.all([
     getDrivers(session.session_key),
     getLaps(session.session_key),
+    getPositions(session.session_key),
   ]);
-  return { session, drivers, laps };
+  return { session, drivers, laps, positions };
 }
 
 // Build per-lap rows: { lap: N, [driverCode]: seconds, ... }
@@ -91,18 +92,34 @@ export default function LapTimeChart({ sessionType = 'Race', sessionKey = null }
   const { session, drivers, chartData, driverCodes } = useMemo(() => {
     if (!data) return {};
 
-    const codes = [
-      ...new Set(
-        data.laps
-          .map((l) => {
-            const d = data.drivers.find((dr) => dr.driver_number === l.driver_number);
-            return d?.name_acronym ?? null;
-          })
-          .filter(Boolean)
-      ),
-    ];
+    // Build final position lookup: driver_number → position
+    const lastPosByDriver = {};
+    for (const p of data.positions ?? []) {
+      if (!p.driver_number || p.position == null) continue;
+      if (!lastPosByDriver[p.driver_number] || p.date > lastPosByDriver[p.driver_number].date) {
+        lastPosByDriver[p.driver_number] = p;
+      }
+    }
 
-    // Default: top 5 drivers (first 5 alphabetically from unique set)
+    // Unique driver codes sorted by finishing position
+    const seenNums = new Set();
+    const orderedDrivers = [];
+    for (const l of data.laps) {
+      if (!seenNums.has(l.driver_number)) {
+        seenNums.add(l.driver_number);
+        orderedDrivers.push(l.driver_number);
+      }
+    }
+    orderedDrivers.sort((a, b) =>
+      (lastPosByDriver[a]?.position ?? 99) - (lastPosByDriver[b]?.position ?? 99)
+    );
+
+    const codes = orderedDrivers.map(num => {
+      const d = data.drivers.find(dr => dr.driver_number === num);
+      return d?.name_acronym ?? String(num);
+    });
+
+    // Default: top 5 finishers
     const defaultVisible = new Set(codes.slice(0, 5));
     const active = visibleSet ?? defaultVisible;
 

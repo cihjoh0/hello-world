@@ -4,7 +4,7 @@ import {
   Legend, ResponsiveContainer, ReferenceLine, ReferenceArea,
 } from 'recharts';
 import { useOpenF1 } from '../../hooks/useOpenF1';
-import { resolveSession, getDrivers, getLaps, getPitStops, getRaceControl } from '../../api/openf1';
+import { resolveSession, getDrivers, getLaps, getPitStops, getRaceControl, getPositions } from '../../api/openf1';
 import DashboardPanel from '../dashboard/DashboardPanel';
 import LoadingSpinner from '../ui/LoadingSpinner';
 import ErrorMessage from '../ui/ErrorMessage';
@@ -14,13 +14,14 @@ const DEFAULT_SHOWN = 8;
 async function fetchData(sessionType, sessionKey) {
   const session = await resolveSession(sessionType, sessionKey);
   if (!session) throw new Error(`No ${sessionType.toLowerCase()} session found`);
-  const [drivers, laps, pitStops, raceControl] = await Promise.all([
+  const [drivers, laps, pitStops, raceControl, positions] = await Promise.all([
     getDrivers(session.session_key),
     getLaps(session.session_key),
     getPitStops(session.session_key),
     getRaceControl(session.session_key),
+    getPositions(session.session_key),
   ]);
-  return { session, drivers, laps, pitStops, raceControl };
+  return { session, drivers, laps, pitStops, raceControl, positions };
 }
 
 export default function RaceGapChart({ sessionType = 'Race', sessionKey = null }) {
@@ -33,7 +34,7 @@ export default function RaceGapChart({ sessionType = 'Race', sessionKey = null }
 
   const { chartData, driverRows, pitSet, safetyCarPeriods, subtitle } = useMemo(() => {
     if (!data) return {};
-    const { session, drivers, laps, pitStops, raceControl } = data;
+    const { session, drivers, laps, pitStops, raceControl, positions } = data;
     const driverMap = Object.fromEntries(drivers.map(d => [d.driver_number, d]));
 
     // Build { driverNum: { lapNum: duration } }
@@ -72,12 +73,17 @@ export default function RaceGapChart({ sessionType = 'Race', sessionKey = null }
       chartData.push(row);
     }
 
-    // Sort by finishing order (minimum final cumulative time = P1)
-    const finalTime = num => {
-      const lastLap = Math.max(...Object.keys(cumulative[num]).map(Number));
-      return cumulative[num][lastLap] ?? Infinity;
-    };
-    const sorted = [...driverNums].sort((a, b) => finalTime(a) - finalTime(b));
+    // Sort by actual finishing position from the /position endpoint
+    const lastPosByDriver = {};
+    for (const p of positions ?? []) {
+      if (!p.driver_number || p.position == null) continue;
+      if (!lastPosByDriver[p.driver_number] || p.date > lastPosByDriver[p.driver_number].date) {
+        lastPosByDriver[p.driver_number] = p;
+      }
+    }
+    const sorted = [...driverNums].sort((a, b) =>
+      (lastPosByDriver[a]?.position ?? 99) - (lastPosByDriver[b]?.position ?? 99)
+    );
 
     // Teammates share a team colour → second driver gets dashed line
     const seenColors = new Set();

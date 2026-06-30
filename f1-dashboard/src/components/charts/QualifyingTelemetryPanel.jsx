@@ -19,7 +19,7 @@ function fmtLap(s) {
 }
 
 const DRIVER_COLORS = ['#e8002d', '#00a0dd', '#39b54a', '#ff8700'];
-const TABS = ['Speed', 'Throttle & Brake', 'Gear', 'Δ Time'];
+const TABS = ['Speed', 'Throttle & Brake', 'Gear', 'Δ Time', 'Sectors'];
 const MAX_DRIVERS = 4;
 const CHART_STEP_S = 0.25; // resample grid every 250 ms
 
@@ -316,6 +316,30 @@ export default function QualifyingTelemetryPanel({ sessionType = 'Race', session
     return points;
   }, [selected, telemetry, telWithDist, activeTab]);
 
+  // Sector comparison table (uses fastestLaps data, no telemetry needed)
+  const sectorRows = useMemo(() => {
+    if (activeTab !== 'Sectors' || !selected.length) return null;
+    const fields = ['duration_sector_1', 'duration_sector_2', 'duration_sector_3'];
+    const fastestPerSector = fields.map(f => {
+      const times = selected.map(n => fastestLaps[n]?.[f]).filter(t => t != null && t > 0);
+      return times.length ? Math.min(...times) : null;
+    });
+    const rows = selected.map((num, selIdx) => {
+      const lap = fastestLaps[num];
+      const drv = drivers.find(d => d.driver_number === num);
+      const times = fields.map(f => (lap?.[f] ?? null));
+      const deltas = times.map((t, i) =>
+        t != null && fastestPerSector[i] != null ? t - fastestPerSector[i] : null
+      );
+      const lapTotal = times.every(t => t != null) ? times.reduce((s, t) => s + t, 0) : null;
+      return { num, drv, selIdx, times, deltas, lapTotal };
+    });
+    const theoBest = fastestPerSector.every(t => t != null)
+      ? fastestPerSector.reduce((s, t) => s + t, 0)
+      : null;
+    return { rows, fastestPerSector, theoBest };
+  }, [activeTab, selected, fastestLaps, drivers]);
+
   // Circuit map: reference driver's GPS path colored by delta vs 2nd driver
   const circuitMapData = useMemo(() => {
     if (activeTab !== 'Δ Time' || chartData.length === 0) return null;
@@ -419,8 +443,73 @@ export default function QualifyingTelemetryPanel({ sessionType = 'Race', session
             </p>
           )}
 
+          {/* Sectors table */}
+          {activeTab === 'Sectors' && sectorRows && (
+            <div style={{ marginTop: '0.75rem', overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: 'left', padding: '4px 8px', color: '#666', fontWeight: 400 }}>Driver</th>
+                    {['S1', 'S2', 'S3'].map(s => (
+                      <th key={s} style={{ textAlign: 'right', padding: '4px 8px', color: '#666', fontWeight: 400 }}>{s}</th>
+                    ))}
+                    <th style={{ textAlign: 'right', padding: '4px 8px', color: '#666', fontWeight: 400 }}>Lap</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sectorRows.rows.map(({ num, drv, selIdx, times, deltas, lapTotal }) => {
+                    const teamColor = drv?.team_colour ? `#${drv.team_colour}` : '#888';
+                    return (
+                      <tr key={num} style={{ borderTop: '1px solid #1e1e2e' }}>
+                        <td style={{ padding: '6px 8px' }}>
+                          <span style={{ color: DRIVER_COLORS[selIdx], marginRight: 6 }}>●</span>
+                          <span style={{ color: teamColor }}>{drv?.name_acronym ?? num}</span>
+                        </td>
+                        {times.map((t, i) => {
+                          const isFastest = t != null && sectorRows.fastestPerSector[i] != null
+                            && Math.abs(t - sectorRows.fastestPerSector[i]) < 0.0005;
+                          const delta = deltas[i];
+                          return (
+                            <td key={i} style={{
+                              textAlign: 'right', padding: '6px 8px',
+                              color: isFastest ? '#a855f7' : '#ccc',
+                              fontWeight: isFastest ? 700 : 400,
+                            }}>
+                              {t != null ? t.toFixed(3) : '—'}
+                              {!isFastest && delta != null && delta > 0.0005 && (
+                                <span style={{ color: '#666', fontSize: 10, marginLeft: 4 }}>+{delta.toFixed(3)}</span>
+                              )}
+                            </td>
+                          );
+                        })}
+                        <td style={{ textAlign: 'right', padding: '6px 8px', color: '#aaa' }}>
+                          {lapTotal != null ? fmtLap(lapTotal) : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  <tr style={{ borderTop: '2px solid #2a2a3e', color: '#a855f7' }}>
+                    <td style={{ padding: '6px 8px', fontWeight: 700 }}>Theo Best</td>
+                    {sectorRows.fastestPerSector.map((t, i) => (
+                      <td key={i} style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 700 }}>
+                        {t != null ? t.toFixed(3) : '—'}
+                      </td>
+                    ))}
+                    <td style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 700 }}>
+                      {sectorRows.theoBest != null ? fmtLap(sectorRows.theoBest) : '—'}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <p className="f1-footnote" style={{ marginTop: '0.5rem' }}>
+                Sector times from each driver's personal best qualifying lap. Purple = fastest in sector.
+                Theoretical best = sum of individually fastest sectors.
+              </p>
+            </div>
+          )}
+
           {/* Chart */}
-          {!anyTelLoading && chartData.length > 0 && (
+          {activeTab !== 'Sectors' && !anyTelLoading && chartData.length > 0 && (
             <ResponsiveContainer width="100%" height={260}>
               <LineChart data={chartData} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" />
@@ -469,7 +558,7 @@ export default function QualifyingTelemetryPanel({ sessionType = 'Race', session
             </ResponsiveContainer>
           )}
 
-          {!anyTelLoading && chartData.length === 0 && (
+          {activeTab !== 'Sectors' && !anyTelLoading && chartData.length === 0 && (
             <p className="f1-hint" style={{ padding: '1rem', textAlign: 'center' }}>
               No telemetry data available for this session.
             </p>

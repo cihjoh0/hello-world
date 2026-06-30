@@ -76,7 +76,7 @@ export default function App() {
         </div>
       </header>
       <main className="app-main">
-        <Dashboard sessionType={sessionType} sessionKey={selectedSessionKey} />
+        <Dashboard sessionType={sessionType} sessionKey={selectedSessionKey} year={year} />
       </main>
       {showStories && (
         <StoryExport

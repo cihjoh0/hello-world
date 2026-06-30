@@ -4,7 +4,7 @@ import {
   ResponsiveContainer, ReferenceLine,
 } from 'recharts';
 import { useOpenF1 } from '../../hooks/useOpenF1';
-import { resolveSession, getDrivers, getLaps, getStints, getPitStops } from '../../api/openf1';
+import { resolveSession, getDrivers, getLaps, getStints, getPitStops, getPositions } from '../../api/openf1';
 import DashboardPanel from '../dashboard/DashboardPanel';
 import LoadingSpinner from '../ui/LoadingSpinner';
 import ErrorMessage from '../ui/ErrorMessage';
@@ -22,13 +22,14 @@ const COMPOUND_ABBR = { SOFT: 'S', MEDIUM: 'M', HARD: 'H', INTERMEDIATE: 'I', WE
 async function fetchData(sessionType, sessionKey) {
   const session = await resolveSession(sessionType, sessionKey);
   if (!session) throw new Error(`No ${sessionType.toLowerCase()} session found`);
-  const [drivers, laps, stints, pitStops] = await Promise.all([
+  const [drivers, laps, stints, pitStops, positions] = await Promise.all([
     getDrivers(session.session_key),
     getLaps(session.session_key),
     getStints(session.session_key),
     getPitStops(session.session_key),
+    getPositions(session.session_key),
   ]);
-  return { session, drivers, laps, stints, pitStops };
+  return { session, drivers, laps, stints, pitStops, positions };
 }
 
 function getCompoundAtLap(stintList, lap) {
@@ -78,7 +79,7 @@ export default function BattleTracker({ sessionType = 'Race', sessionKey = null 
 
   const { driverRows, lapMap, stintMap, pitSet, defaultA, defaultB, subtitle } = useMemo(() => {
     if (!data) return {};
-    const { session, drivers, laps, stints, pitStops } = data;
+    const { session, drivers, laps, stints, pitStops, positions } = data;
     const driverMap = Object.fromEntries(drivers.map(d => [d.driver_number, d]));
 
     const lapMap = {};
@@ -89,8 +90,18 @@ export default function BattleTracker({ sessionType = 'Race', sessionKey = null 
     }
 
     const driverNums = Object.keys(lapMap).map(Number);
-    const totalTime = num => Object.values(lapMap[num]).reduce((s, t) => s + t, 0);
-    const sorted = [...driverNums].sort((a, b) => totalTime(a) - totalTime(b));
+
+    // Sort by actual finishing position from the /position endpoint
+    const lastPosByDriver = {};
+    for (const p of positions ?? []) {
+      if (!p.driver_number || p.position == null) continue;
+      if (!lastPosByDriver[p.driver_number] || p.date > lastPosByDriver[p.driver_number].date) {
+        lastPosByDriver[p.driver_number] = p;
+      }
+    }
+    const sorted = [...driverNums].sort((a, b) =>
+      (lastPosByDriver[a]?.position ?? 99) - (lastPosByDriver[b]?.position ?? 99)
+    );
 
     const seenColors = new Set();
     const driverRows = sorted.map((num, i) => {

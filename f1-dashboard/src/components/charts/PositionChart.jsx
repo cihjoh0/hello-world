@@ -4,7 +4,7 @@ import {
   ResponsiveContainer, ReferenceLine,
 } from 'recharts';
 import { useOpenF1 } from '../../hooks/useOpenF1';
-import { resolveSession, getDrivers, getLaps } from '../../api/openf1';
+import { resolveSession, getDrivers, getLaps, getPositions } from '../../api/openf1';
 import DashboardPanel from '../dashboard/DashboardPanel';
 import LoadingSpinner from '../ui/LoadingSpinner';
 import ErrorMessage from '../ui/ErrorMessage';
@@ -14,11 +14,23 @@ const DEFAULT_SHOWN = 10;
 async function fetchData(sessionType, sessionKey) {
   const session = await resolveSession(sessionType, sessionKey);
   if (!session) throw new Error(`No ${sessionType.toLowerCase()} session found`);
-  const [drivers, laps] = await Promise.all([
+  const [drivers, laps, positions] = await Promise.all([
     getDrivers(session.session_key),
     getLaps(session.session_key),
+    getPositions(session.session_key),
   ]);
-  return { session, drivers, laps };
+  return { session, drivers, laps, positions };
+}
+
+// Latest position for a driver at or before targetMs (binary search)
+function posAtTime(sorted, targetMs) {
+  let lo = 0, hi = sorted.length - 1, result = null;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (sorted[mid].t <= targetMs) { result = sorted[mid].pos; lo = mid + 1; }
+    else hi = mid - 1;
+  }
+  return result;
 }
 
 export default function PositionChart({ sessionType = 'Race', sessionKey = null }) {
@@ -31,53 +43,61 @@ export default function PositionChart({ sessionType = 'Race', sessionKey = null 
 
   const { chartData, driverRows, subtitle } = useMemo(() => {
     if (!data) return {};
-    const { session, drivers, laps } = data;
+    const { session, drivers, laps, positions } = data;
     const driverMap = Object.fromEntries(drivers.map(d => [d.driver_number, d]));
 
-    const byDriver = {};
-    for (const { driver_number: num, lap_number: ln, lap_duration: dur } of laps) {
-      if (!num || !ln || ln < 1 || !dur || dur <= 0) continue;
-      if (!byDriver[num]) byDriver[num] = {};
-      byDriver[num][ln] = dur;
+    // lap lookup: driverNum → lapNum → { t0 (ms), dur (s) }
+    const lapsByDriver = {};
+    for (const { driver_number: num, lap_number: ln, lap_duration: dur, date_start } of laps) {
+      if (!num || !ln || ln < 1 || !dur || dur <= 0 || !date_start) continue;
+      (lapsByDriver[num] ??= {})[ln] = { t0: new Date(date_start).getTime(), dur };
     }
 
-    const driverNums = Object.keys(byDriver).map(Number);
+    // position time series per driver, sorted ascending
+    const posByDriver = {};
+    for (const p of positions) {
+      if (!p.driver_number || p.position == null) continue;
+      (posByDriver[p.driver_number] ??= []).push({
+        t: new Date(p.date).getTime(),
+        pos: p.position,
+      });
+    }
+    for (const arr of Object.values(posByDriver)) arr.sort((a, b) => a.t - b.t);
+
+    const driverNums = Object.keys(lapsByDriver).map(Number);
     if (!driverNums.length) return {};
 
-    const cumulative = {};
-    for (const num of driverNums) {
-      const lapNums = Object.keys(byDriver[num]).map(Number).sort((a, b) => a - b);
-      let cum = 0;
-      cumulative[num] = {};
-      for (const ln of lapNums) { cum += byDriver[num][ln]; cumulative[num][ln] = cum; }
-    }
+    const maxLap = Math.max(...driverNums.flatMap(n => Object.keys(lapsByDriver[n]).map(Number)));
 
-    const maxLap = Math.max(...driverNums.flatMap(n => Object.keys(cumulative[n]).map(Number)));
-
-    // Rank drivers per lap by cumulative time; absent drivers get null (DNF/lapped out)
     const chartData = [];
     for (let lap = 1; lap <= maxLap; lap++) {
-      const present = driverNums.filter(n => cumulative[n]?.[lap] != null);
-      if (!present.length) continue;
-      const ranked = [...present].sort((a, b) => cumulative[a][lap] - cumulative[b][lap]);
       const row = { lap };
-      ranked.forEach((num, i) => { row[`d${num}`] = i + 1; });
-      chartData.push(row);
+      let hasAny = false;
+      for (const num of driverNums) {
+        const lapObj = lapsByDriver[num]?.[lap];
+        if (!lapObj) continue;
+        // Sample actual position at the moment the driver crosses the finish line
+        const crossingMs = lapObj.t0 + lapObj.dur * 1000;
+        const pos = posAtTime(posByDriver[num], crossingMs);
+        if (pos != null) { row[`d${num}`] = pos; hasAny = true; }
+      }
+      if (hasAny) chartData.push(row);
     }
 
-    const finalTime = num => {
-      const lastLap = Math.max(...Object.keys(cumulative[num]).map(Number));
-      return cumulative[num][lastLap] ?? Infinity;
+    // Sort driver list by last known position (DNFs fall to back)
+    const finalPos = num => {
+      const series = posByDriver[num];
+      return series?.length ? series[series.length - 1].pos : 99;
     };
-    const sorted = [...driverNums].sort((a, b) => finalTime(a) - finalTime(b));
+    const sorted = [...driverNums].sort((a, b) => finalPos(a) - finalPos(b));
 
     const seenColors = new Set();
     const driverRows = sorted.map((num, i) => {
-      const drv   = driverMap[num] ?? {};
+      const drv = driverMap[num] ?? {};
       const color = drv.team_colour ? `#${drv.team_colour}` : '#888';
-      const dash  = seenColors.has(color);
+      const isDashed = seenColors.has(color);
       seenColors.add(color);
-      return { num, drv, rank: i + 1, color, isDashed: dash };
+      return { num, drv, rank: i + 1, color, isDashed };
     });
 
     return {
@@ -172,7 +192,7 @@ export default function PositionChart({ sessionType = 'Race', sessionKey = null 
           </ResponsiveContainer>
 
           <p className="f1-footnote" style={{ marginTop: '0.5rem' }}>
-            Position derived from cumulative lap times — pit laps produce temporary drops.
+            On-track positions from live timing data, sampled at each driver's lap crossing.
             Dashed lines = teammate. Click chips to show/hide drivers.
           </p>
         </>

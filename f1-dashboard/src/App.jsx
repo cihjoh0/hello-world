@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Dashboard from './components/dashboard/Dashboard';
 import StoryExport from './components/stories/StoryExport';
 import { getSessions } from './api/openf1';
@@ -14,17 +14,64 @@ export default function App() {
   const [sessionType, setSessionType] = useState('Race');
   const [year, setYear] = useState(CURRENT_YEAR);
   const [showStories, setShowStories] = useState(false);
-  const [sessions, setSessions] = useState([]);
-  const [selectedSessionKey, setSelectedSessionKey] = useState(null);
+  // One entry per race weekend (meeting), combining race + sprint keys
+  const [rounds, setRounds] = useState([]);
+  const [selectedMeetingKey, setSelectedMeetingKey] = useState(null);
 
   useEffect(() => {
-    setSessions([]);
-    setSelectedSessionKey(null);
-    getSessions(year, sessionType).then(data => {
-      setSessions(data);
-      if (data.length > 0) setSelectedSessionKey(data[data.length - 1].session_key);
+    setRounds([]);
+    setSelectedMeetingKey(null);
+    const now = Date.now();
+    Promise.all([
+      getSessions(year, 'Race'),
+      getSessions(year, 'Sprint'),
+    ]).then(([races, sprints]) => {
+      const sprintByMeeting = {};
+      for (const s of sprints) sprintByMeeting[s.meeting_key] = s.session_key;
+
+      // Only include meetings whose race has already taken place
+      const pastRaces = races
+        .filter(r => r.meeting_key && new Date(r.date_start).getTime() <= now)
+        .sort((a, b) => new Date(a.date_start) - new Date(b.date_start));
+
+      // Deduplicate by meeting_key (race weekends are identified by meeting, not session)
+      const seen = new Set();
+      const roundList = [];
+      for (const r of pastRaces) {
+        if (seen.has(r.meeting_key)) continue;
+        seen.add(r.meeting_key);
+        roundList.push({
+          meetingKey: r.meeting_key,
+          location: r.location ?? r.circuit_short_name ?? 'Unknown',
+          raceKey: r.session_key,
+          sprintKey: sprintByMeeting[r.meeting_key] ?? null,
+        });
+      }
+
+      setRounds(roundList);
+      if (roundList.length > 0) {
+        setSelectedMeetingKey(roundList[roundList.length - 1].meetingKey);
+      }
     });
-  }, [year, sessionType]);
+  }, [year]);
+
+  const selectedRound = useMemo(
+    () => rounds.find(r => r.meetingKey === selectedMeetingKey) ?? null,
+    [rounds, selectedMeetingKey]
+  );
+
+  // When switching to a non-sprint weekend while in Sprint mode, fall back to Race
+  useEffect(() => {
+    if (sessionType === 'Sprint' && selectedRound && !selectedRound.sprintKey) {
+      setSessionType('Race');
+    }
+  }, [selectedRound, sessionType]);
+
+  const selectedSessionKey = useMemo(() => {
+    if (!selectedRound) return null;
+    if (sessionType === 'Sprint') return selectedRound.sprintKey ?? selectedRound.raceKey;
+    return selectedRound.raceKey;
+  }, [selectedRound, sessionType]);
 
   return (
     <div className="app">
@@ -43,6 +90,8 @@ export default function App() {
             <button
               className={`stt-btn ${sessionType === 'Sprint' ? 'active' : ''}`}
               onClick={() => setSessionType('Sprint')}
+              disabled={!selectedRound?.sprintKey}
+              title={selectedRound && !selectedRound.sprintKey ? 'No sprint race this weekend' : undefined}
             >
               Sprint
             </button>
@@ -57,15 +106,15 @@ export default function App() {
               <option key={y} value={y}>{y}</option>
             ))}
           </select>
-          {sessions.length > 0 && (
+          {rounds.length > 0 && (
             <select
               className="race-select"
-              value={selectedSessionKey ?? ''}
-              onChange={e => setSelectedSessionKey(Number(e.target.value))}
+              value={selectedMeetingKey ?? ''}
+              onChange={e => setSelectedMeetingKey(Number(e.target.value))}
             >
-              {sessions.map(s => (
-                <option key={s.session_key} value={s.session_key}>
-                  {s.location ?? s.circuit_short_name ?? 'Unknown'}
+              {rounds.map(r => (
+                <option key={r.meetingKey} value={r.meetingKey}>
+                  {r.location}{r.sprintKey ? ' ★' : ''}
                 </option>
               ))}
             </select>

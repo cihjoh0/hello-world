@@ -108,6 +108,14 @@ function useStoryData(sessionType, sessionKey = null) {
           .slice(0, 10)
           .map(p => ({ ...p, driver: driverMap[p.driver_number] }));
 
+        // Starting grid positions: earliest position entry per driver
+        const startPos = {};
+        positions.forEach(p => {
+          if (!startPos[p.driver_number] || p.date < startPos[p.driver_number].date) {
+            startPos[p.driver_number] = p;
+          }
+        });
+
         setState({
           loading: false,
           error: null,
@@ -120,6 +128,8 @@ function useStoryData(sessionType, sessionKey = null) {
             top5Fast,
             totalLaps,
             pitsSorted,
+            startPos,
+            allPitStops: pitStops,
           },
         });
       } catch (e) {
@@ -389,10 +399,151 @@ function PitStopsCard({ session, pitsSorted }) {
   );
 }
 
+// ── Storyline generator ───────────────────────────────────────────────────────
+
+function generateStorylines(data, label) {
+  const { session, result, fastestLap, pitsSorted, startPos, allPitStops, driverMap } = data;
+  const loc = session?.location ?? '';
+  const tag = `#${loc.replace(/\s+/g, '')}GP`;
+  const lines = [];
+
+  // 1. Podium / race result
+  const [p1, p2, p3] = result;
+  if (p1) {
+    lines.push({
+      icon: '🏁',
+      headline: `${p1.name_acronym} wins the ${loc} ${label}`,
+      text: `🏁 ${label.toUpperCase()} RESULT | ${loc} Grand Prix\n\nP1 ${p1.name_acronym} (${p1.team_name ?? ''})\nP2 ${p2?.name_acronym ?? '?'}${p2?.gap_s != null ? ` +${p2.gap_s.toFixed(3)}s` : ''}\nP3 ${p3?.name_acronym ?? '?'}${p3?.gap_s != null ? ` +${p3.gap_s.toFixed(3)}s` : ''}\n\n#F1 ${tag}`,
+    });
+  }
+
+  // 2. Biggest position gainer
+  const movers = result
+    .map(r => {
+      const start = startPos[r.driver_number]?.position ?? r.position;
+      return { ...r, startPos: start, gained: start - r.position };
+    })
+    .sort((a, b) => b.gained - a.gained);
+  const gainer = movers[0];
+  if (gainer?.gained >= 3) {
+    lines.push({
+      icon: '📈',
+      headline: `${gainer.name_acronym} gains ${gainer.gained} places`,
+      text: `📈 BIGGEST MOVER | ${loc} ${label}\n\n${gainer.name_acronym} started P${gainer.startPos} and finished P${gainer.position} — ${gainer.gained} positions gained on race day! 🚀\n\n#F1 ${tag}`,
+    });
+  }
+
+  // 3. Fastest lap
+  if (fastestLap) {
+    lines.push({
+      icon: '⚡',
+      headline: `${fastestLap.driver?.name_acronym} sets fastest lap`,
+      text: `⚡ FASTEST LAP | ${loc} ${label}\n\n${fastestLap.driver?.name_acronym ?? '?'} (${fastestLap.driver?.team_name ?? ''}) clocked ${fmtLap(fastestLap.lap_duration)} on Lap ${fastestLap.lap_number}.\n\n#F1 #FastestLap ${tag}`,
+    });
+  }
+
+  // 4. Fastest pit stop
+  const best = pitsSorted[0];
+  if (best) {
+    lines.push({
+      icon: '🛑',
+      headline: `${best.driver?.name_acronym} — fastest stop ${best.pit_duration?.toFixed(3)}s`,
+      text: `🛑 FASTEST PIT STOP | ${loc} ${label}\n\n${best.driver?.team_name ?? ''} executed a ${best.pit_duration?.toFixed(3)}s stop for ${best.driver?.name_acronym ?? '?'} on Lap ${best.lap_number}.\n\n#F1 #PitStop ${tag}`,
+    });
+  }
+
+  // 5. Strategy split (1-stop vs 2-stop)
+  const stopCount = {};
+  (allPitStops ?? []).forEach(p => {
+    stopCount[p.driver_number] = (stopCount[p.driver_number] ?? 0) + 1;
+  });
+  const oneStop = result.filter(r => (stopCount[r.driver_number] ?? 0) === 1);
+  const twoStop = result.filter(r => (stopCount[r.driver_number] ?? 0) === 2);
+  if (oneStop.length > 0 && twoStop.length > 0) {
+    const best1 = oneStop[0];
+    const best2 = twoStop[0];
+    lines.push({
+      icon: '🔧',
+      headline: `Strategy battle: 1-stop vs 2-stop`,
+      text: `🔧 STRATEGY | ${loc} ${label}\n\n${oneStop.length} drivers went 1-stop, ${twoStop.length} went 2-stop.\n\nBest 1-stopper: ${best1?.name_acronym} P${best1?.position}\nBest 2-stopper: ${best2?.name_acronym} P${best2?.position}\n\n#F1 #Strategy ${tag}`,
+    });
+  }
+
+  return lines;
+}
+
+// ── Social posts UI ───────────────────────────────────────────────────────────
+
+function SocialPostsSection({ data, label }) {
+  const [copied, setCopied] = useState(null);
+  const storylines = generateStorylines(data, label);
+
+  const copy = (text, idx) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(idx);
+      setTimeout(() => setCopied(null), 2000);
+    });
+  };
+
+  if (!storylines.length) return (
+    <p style={{ color: '#555', textAlign: 'center', padding: '1rem' }}>
+      Not enough data to generate storylines for this session.
+    </p>
+  );
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {storylines.map((line, i) => (
+        <div key={i} style={{
+          background: '#0f0f1a',
+          border: '1px solid #1e1e2e',
+          borderRadius: 8,
+          padding: '12px 14px',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <span style={{ fontSize: 16 }}>{line.icon}</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#e0e0e8', flex: 1 }}>{line.headline}</span>
+            <button
+              onClick={() => copy(line.text, i)}
+              style={{
+                background: copied === i ? '#39b54a' : '#1e1e2e',
+                color: copied === i ? '#0d0d14' : '#aaa',
+                border: `1px solid ${copied === i ? '#39b54a' : '#2a2a3e'}`,
+                borderRadius: 4,
+                padding: '3px 10px',
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: 'pointer',
+                flexShrink: 0,
+                transition: 'all 0.15s',
+              }}
+            >
+              {copied === i ? '✓ Copied' : 'Copy'}
+            </button>
+          </div>
+          <pre style={{
+            margin: 0,
+            fontFamily: 'inherit',
+            fontSize: 12,
+            color: '#666',
+            whiteSpace: 'pre-wrap',
+            lineHeight: 1.6,
+            borderTop: '1px solid #1a1a2a',
+            paddingTop: 8,
+          }}>
+            {line.text}
+          </pre>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Main modal ────────────────────────────────────────────────────────────────
 
 export default function StoryExport({ sessionType = 'Race', sessionKey = null, onClose }) {
   const { loading, error, data } = useStoryData(sessionType, sessionKey);
+  const [tab, setTab] = useState('posts');
   const isSprint = sessionType === 'Sprint';
   const label = isSprint ? 'Sprint' : 'Race';
 
@@ -400,7 +551,7 @@ export default function StoryExport({ sessionType = 'Race', sessionKey = null, o
     <div className="story-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="story-modal">
         <div className="story-modal-header">
-          <span>Instagram Stories · {label}</span>
+          <span>Share {label} · {data?.session?.location ?? ''}</span>
           <button className="story-close" onClick={onClose}>✕</button>
         </div>
 
@@ -413,27 +564,62 @@ export default function StoryExport({ sessionType = 'Race', sessionKey = null, o
         )}
 
         {data && (
-          <div className="story-scroll">
-            <PodiumCard session={data.session} result={data.result} label={label} />
-            <TireStrategyCard
-              session={data.session}
-              stints={data.stints}
-              driverMap={data.driverMap}
-              totalLaps={data.totalLaps}
-              label={label}
-            />
-            <FastestLapCard
-              session={data.session}
-              fastestLap={data.fastestLap}
-              top5Fast={data.top5Fast}
-              label={label}
-            />
-            {!isSprint && <PitStopsCard session={data.session} pitsSorted={data.pitsSorted} />}
-          </div>
+          <>
+            <div style={{ display: 'flex', borderBottom: '1px solid #1e1e2e', marginBottom: 16 }}>
+              {['posts', 'cards'].map(t => (
+                <button
+                  key={t}
+                  onClick={() => setTab(t)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    borderBottom: `2px solid ${tab === t ? '#e8002d' : 'transparent'}`,
+                    color: tab === t ? '#fff' : '#555',
+                    padding: '10px 20px',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {t === 'posts' ? '✍ Social Posts' : '📸 Story Cards'}
+                </button>
+              ))}
+            </div>
+
+            {tab === 'posts' && (
+              <div className="story-scroll">
+                <SocialPostsSection data={data} label={label} />
+              </div>
+            )}
+
+            {tab === 'cards' && (
+              <div className="story-scroll">
+                <PodiumCard session={data.session} result={data.result} label={label} />
+                <TireStrategyCard
+                  session={data.session}
+                  stints={data.stints}
+                  driverMap={data.driverMap}
+                  totalLaps={data.totalLaps}
+                  label={label}
+                />
+                <FastestLapCard
+                  session={data.session}
+                  fastestLap={data.fastestLap}
+                  top5Fast={data.top5Fast}
+                  label={label}
+                />
+                {!isSprint && <PitStopsCard session={data.session} pitsSorted={data.pitsSorted} />}
+              </div>
+            )}
+          </>
         )}
 
         <p className="story-hint">
-          Tap "Save to Photos" on each card, then share from your Photos app to Instagram Stories.
+          {tab === 'posts'
+            ? 'Click Copy on any post, then paste into Twitter/X, Instagram or wherever.'
+            : 'Tap "Save to Photos" on each card, then share from your Photos app to Instagram Stories.'}
         </p>
       </div>
     </div>

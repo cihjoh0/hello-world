@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const BASE_URL = 'https://api.openf1.org/v1';
 
-const client = axios.create({ baseURL: BASE_URL });
+const client = axios.create({ baseURL: BASE_URL, timeout: 30_000 });
 
 // In-memory cache: cacheKey → Promise<data>
 // Sharing the same Promise means concurrent callers with the same key
@@ -45,8 +45,11 @@ async function fetchWithRetry(path, params, retries = 4) {
     } catch (err) {
       const status = err.response?.status;
       if (status === 404) return [];
-      if (status === 429 && attempt < retries) {
-        // Exponential backoff: 1s, 2s, 4s, 8s
+      // Retry on: rate limit (429), server errors (5xx), and network-level failures
+      // (no response — timeout, connection reset, proxy error). Don't retry 4xx
+      // client errors other than 429 since they won't resolve on retry.
+      const isTransient = status === 429 || status >= 500 || !err.response;
+      if (isTransient && attempt < retries) {
         await new Promise(r => setTimeout(r, 1000 * 2 ** attempt));
         continue;
       }

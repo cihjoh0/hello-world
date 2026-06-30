@@ -30,6 +30,7 @@ export default function SeasonStandingsPanel({ year = new Date().getFullYear() }
   const [rounds, setRounds] = useState([]);
   const [driverInfo, setDriverInfo] = useState({});
   const [selected, setSelected] = useState(null);
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
 
   useEffect(() => {
     setStatus('idle');
@@ -37,6 +38,7 @@ export default function SeasonStandingsPanel({ year = new Date().getFullYear() }
     setDriverInfo({});
     setSelected(null);
     setError(null);
+    setProgress({ done: 0, total: 0 });
   }, [year]);
 
   const load = async () => {
@@ -46,15 +48,26 @@ export default function SeasonStandingsPanel({ year = new Date().getFullYear() }
       const sessions = await getSessions(year, 'Race');
       if (!sessions.length) throw new Error(`No races found for ${year}`);
 
-      const results = await Promise.all(
-        sessions.map(async s => {
-          const [drivers, laps] = await Promise.all([
-            getDrivers(s.session_key),
-            getLaps(s.session_key),
-          ]);
-          return { round: s.round_number ?? 0, session: s, drivers, order: deriveFinishingOrder(laps) };
-        })
-      );
+      setProgress({ done: 0, total: sessions.length });
+
+      // Load races sequentially in small batches to stay within rate limits
+      // and give visible progress rather than a silent long wait.
+      const results = [];
+      const BATCH = 3;
+      for (let i = 0; i < sessions.length; i += BATCH) {
+        const batch = sessions.slice(i, i + BATCH);
+        const batchResults = await Promise.all(
+          batch.map(async s => {
+            const [drivers, laps] = await Promise.all([
+              getDrivers(s.session_key),
+              getLaps(s.session_key),
+            ]);
+            return { round: s.round_number ?? 0, session: s, drivers, order: deriveFinishingOrder(laps) };
+          })
+        );
+        results.push(...batchResults);
+        setProgress({ done: results.length, total: sessions.length });
+      }
 
       const info = {};
       for (const r of results) {
@@ -129,7 +142,16 @@ export default function SeasonStandingsPanel({ year = new Date().getFullYear() }
           </p>
         </div>
       )}
-      {status === 'loading' && <LoadingSpinner />}
+      {status === 'loading' && (
+        <div style={{ padding: '1.5rem', textAlign: 'center' }}>
+          <LoadingSpinner />
+          {progress.total > 0 && (
+            <p className="f1-footnote" style={{ marginTop: '0.75rem' }}>
+              Loading race {progress.done + 1} of {progress.total}…
+            </p>
+          )}
+        </div>
+      )}
       {status === 'error'   && (
         <>
           <ErrorMessage message={error} />

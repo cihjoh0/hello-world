@@ -10,11 +10,13 @@ import PositionChart from '../charts/PositionChart';
 import WeekendPacePanel from '../charts/WeekendPacePanel';
 import WeatherPanel from '../charts/WeatherPanel';
 import SeasonStandingsPanel from '../charts/SeasonStandingsPanel';
+import TeamRadioPanel from '../charts/TeamRadioPanel';
 
 export default function Dashboard({ sessionType = 'Race', sessionKey = null, year = new Date().getFullYear() }) {
   return (
     <div className="dashboard">
       <WeatherPanel sessionType={sessionType} sessionKey={sessionKey} />
+      <TeamRadioPanel sessionType={sessionType} sessionKey={sessionKey} />
       <WeekendPacePanel sessionType={sessionType} sessionKey={sessionKey} />
       <PositionChart sessionType={sessionType} sessionKey={sessionKey} />
       <RaceGapChart sessionType={sessionType} sessionKey={sessionKey} />

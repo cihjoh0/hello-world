@@ -13,8 +13,8 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 // Global concurrency limiter — cap in-flight HTTP requests to avoid 429s.
 // With ~30 panels loading simultaneously on mount, uncapped requests exhaust
 // the OpenF1 rate limit faster than exponential backoff can recover.
-const MAX_CONCURRENT = 3;
-const REQUEST_GAP_MS = 250; // stagger request starts (~4/sec max)
+const MAX_CONCURRENT = 2;
+const REQUEST_GAP_MS = 500; // stagger request starts (~2/sec max)
 let _active = 0;
 const _queue = [];
 let _rateLimitUntil = 0; // absolute ms timestamp: pause all requests until this time
@@ -72,7 +72,10 @@ async function fetchWithRetry(path, params, retries = 4) {
           if (retryAfter) backoff = Math.max(backoff, parseInt(retryAfter, 10) * 1000);
           _rateLimitUntil = Math.max(_rateLimitUntil, Date.now() + backoff);
         }
-        await new Promise(r => setTimeout(r, backoff));
+        // Add random jitter (0–100% of backoff) so concurrent retries re-spread
+        // rather than all waking at the same instant and re-bursting together.
+        const jitter = Math.random() * backoff;
+        await new Promise(r => setTimeout(r, backoff + jitter));
         continue;
       }
       throw err;

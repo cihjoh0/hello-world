@@ -13,16 +13,30 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 // Global concurrency limiter — cap in-flight HTTP requests to avoid 429s.
 // With ~30 panels loading simultaneously on mount, uncapped requests exhaust
 // the OpenF1 rate limit faster than exponential backoff can recover.
-const MAX_CONCURRENT = 4;
+const MAX_CONCURRENT = 3;
+const REQUEST_GAP_MS = 250; // stagger request starts (~4/sec max)
 let _active = 0;
 const _queue = [];
+let _rateLimitUntil = 0; // absolute ms timestamp: pause all requests until this time
+let _nextSlotTime = 0;   // next available staggered start time
 
 function withConcurrencyLimit(fn) {
   return new Promise((resolve, reject) => {
     const run = () => {
       _active++;
+      // Claim a time slot, staggering each request by REQUEST_GAP_MS
+      const slotTime = Math.max(_nextSlotTime, Date.now());
+      _nextSlotTime = slotTime + REQUEST_GAP_MS;
+      const wrapped = async () => {
+        // Yield to the microtask queue so any pending 429 catch block can set
+        // _rateLimitUntil before we compute the pause duration below.
+        await Promise.resolve();
+        const pause = Math.max(slotTime, _rateLimitUntil) - Date.now();
+        if (pause > 0) await new Promise(r => setTimeout(r, pause));
+        return fn();
+      };
       Promise.resolve()
-        .then(fn)
+        .then(wrapped)
         .then(
           v => { _active--; if (_queue.length) _queue.shift()(); resolve(v); },
           e => { _active--; if (_queue.length) _queue.shift()(); reject(e); }
@@ -50,7 +64,15 @@ async function fetchWithRetry(path, params, retries = 4) {
       // client errors other than 429 since they won't resolve on retry.
       const isTransient = status === 429 || status >= 500 || !err.response;
       if (isTransient && attempt < retries) {
-        await new Promise(r => setTimeout(r, 1000 * 2 ** attempt));
+        let backoff = 1000 * 2 ** attempt;
+        if (status === 429) {
+          // Honour Retry-After header if present, then broadcast the pause globally
+          // so queued requests also wait rather than firing immediately.
+          const retryAfter = err.response?.headers?.['retry-after'];
+          if (retryAfter) backoff = Math.max(backoff, parseInt(retryAfter, 10) * 1000);
+          _rateLimitUntil = Math.max(_rateLimitUntil, Date.now() + backoff);
+        }
+        await new Promise(r => setTimeout(r, backoff));
         continue;
       }
       throw err;

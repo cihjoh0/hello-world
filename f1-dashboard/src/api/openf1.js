@@ -173,3 +173,8 @@ export async function getCarData(sessionKey, driverNumber) {
 export async function getLocation(sessionKey, driverNumber) {
   return listGet('/location', { session_key: sessionKey, driver_number: driverNumber });
 }
+
+// Team radio recordings for a session — returns {date, driver_number, recording_url}.
+export async function getTeamRadio(sessionKey) {
+  return listGet('/team_radio', { session_key: sessionKey });
+}

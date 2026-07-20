@@ -1,60 +1,72 @@
 """
-Fetch running activities from Garmin Connect via garth and store them in SQLite.
+Fetch running activities from Garmin Connect and store them in SQLite.
 
 Usage:
-    # First-time auth (saves session token to ~/.garth):
-    python fetch.py --auth
-
-    # Incremental sync (only new activities):
-    python fetch.py
-
-    # Full re-sync of last N activities:
-    python fetch.py --limit 200
+    python fetch.py --auth           # First-time auth (saves session to ~/.garth)
+    python fetch.py                  # Incremental sync (only new activities)
+    python fetch.py --limit 500      # Sync last N activities
+    python fetch.py --full           # Re-sync all (ignore existing IDs)
 """
 import argparse
 import getpass
-import json
 import sys
-from datetime import datetime, timezone
+from pathlib import Path
 
-import garth
+from garminconnect import (
+    Garmin,
+    GarminConnectTooManyRequestsError,
+    GarminConnectAuthenticationError,
+)
 
 from db import get_conn, init_db
 
-
-GARTH_HOME = "~/.garth"
+GARTH_HOME = Path("~/.garth").expanduser()
 ACTIVITY_TYPE = "running"
+
+
+def get_mfa():
+    return input("MFA/2FA code: ")
 
 
 def authenticate():
     email = input("Garmin email: ")
     password = getpass.getpass("Garmin password: ")
-    garth.login(email, password)
-    garth.save(GARTH_HOME)
-    print("Session saved to ~/.garth — re-run without --auth to sync data.")
+    try:
+        api = Garmin(email=email, password=password)
+        api.login(prompt_mfa=get_mfa)
+    except GarminConnectTooManyRequestsError:
+        print("Rate limited by Garmin — wait 30 minutes and retry.", file=sys.stderr)
+        sys.exit(1)
+    except GarminConnectAuthenticationError:
+        print("Wrong email or password.", file=sys.stderr)
+        sys.exit(1)
+    GARTH_HOME.mkdir(parents=True, exist_ok=True)
+    api.garth.dump(str(GARTH_HOME))
+    print(f"Session saved to {GARTH_HOME} — re-run without --auth to sync data.")
 
 
 def load_session():
+    if not GARTH_HOME.exists():
+        print("No saved session. Run with --auth first.", file=sys.stderr)
+        sys.exit(1)
+    api = Garmin()
+    api.garth.load(str(GARTH_HOME))
+    return api
+
+
+def fetch_activities(api, limit=100, start=0):
     try:
-        garth.resume(GARTH_HOME)
-    except Exception:
-        print("No saved session found. Run with --auth first.", file=sys.stderr)
+        return api.get_activities(start=start, limit=limit, activitytype=ACTIVITY_TYPE) or []
+    except GarminConnectTooManyRequestsError:
+        print("Rate limited — wait 30 minutes and retry.", file=sys.stderr)
         sys.exit(1)
 
 
-def fetch_activities(limit=100, start=0):
-    params = {
-        "activityType": ACTIVITY_TYPE,
-        "limit": limit,
-        "start": start,
-    }
-    resp = garth.connectapi("/activitylist-service/activities/search/activities", params=params)
-    return resp if isinstance(resp, list) else []
-
-
-def fetch_hr_zones(activity_id):
+def fetch_hr_zones(api, activity_id):
     try:
-        data = garth.connectapi(f"/activity-service/activity/{activity_id}/hrTimeInZones")
+        data = api.garth.connectapi(
+            f"/activity-service/activity/{activity_id}/hrTimeInZones"
+        )
         return data if isinstance(data, list) else []
     except Exception:
         return []
@@ -71,33 +83,23 @@ def parse_activity(a):
 
     activity_id = str(safe("activityId", ""))
     start_raw = safe("startTimeLocal") or safe("startTimeGMT") or ""
-    distance_m = safe("distance")
     duration_s = safe("duration")
-    moving_time_s = safe("movingDuration") or duration_s
-    avg_hr = safe("averageHR")
-    max_hr = safe("maxHR")
-    avg_cadence = safe("averageRunningCadenceInStepsPerMinute") or safe("averageBikingCadenceInRevPerMinute")
-    elevation_gain = safe("elevationGain")
-    avg_speed_ms = safe("averageSpeed")
-    calories = safe("calories")
-    aerobic_te = safe("aerobicTrainingEffect")
-    vo2max = safe("vO2MaxValue")
 
     return {
         "activity_id": activity_id,
         "name": safe("activityName", ""),
         "start_time": start_raw,
-        "distance_m": distance_m,
+        "distance_m": safe("distance"),
         "duration_s": duration_s,
-        "moving_time_s": moving_time_s,
-        "avg_hr": avg_hr,
-        "max_hr": max_hr,
-        "avg_cadence": avg_cadence,
-        "elevation_gain": elevation_gain,
-        "avg_speed_ms": avg_speed_ms,
-        "calories": calories,
-        "aerobic_te": aerobic_te,
-        "vo2max": vo2max,
+        "moving_time_s": safe("movingDuration") or duration_s,
+        "avg_hr": safe("averageHR"),
+        "max_hr": safe("maxHR"),
+        "avg_cadence": safe("averageRunningCadenceInStepsPerMinute") or safe("averageBikingCadenceInRevPerMinute"),
+        "elevation_gain": safe("elevationGain"),
+        "avg_speed_ms": safe("averageSpeed"),
+        "calories": safe("calories"),
+        "aerobic_te": safe("aerobicTrainingEffect"),
+        "vo2max": safe("vO2MaxValue"),
     }
 
 
@@ -139,7 +141,7 @@ def upsert_hr_zones(conn, activity_id, zones):
             )
 
 
-def sync(limit, incremental):
+def sync(api, limit, incremental):
     init_db()
     conn = get_conn()
     existing = get_existing_ids(conn) if incremental else set()
@@ -149,7 +151,7 @@ def sync(limit, incremental):
     offset = 0
 
     while True:
-        batch = fetch_activities(limit=min(page_size, limit - offset), start=offset)
+        batch = fetch_activities(api, limit=min(page_size, limit - offset), start=offset)
         if not batch:
             break
 
@@ -161,7 +163,7 @@ def sync(limit, incremental):
             if incremental and aid in existing:
                 continue
             upsert_activity(conn, row)
-            zones = fetch_hr_zones(aid)
+            zones = fetch_hr_zones(api, aid)
             upsert_hr_zones(conn, aid, zones)
             new_count += 1
             print(f"  Saved: {row['name']} ({row['start_time']}, {(row['distance_m'] or 0)/1000:.2f} km)")
@@ -186,8 +188,8 @@ def main():
         authenticate()
         return
 
-    load_session()
-    sync(limit=args.limit, incremental=not args.full)
+    api = load_session()
+    sync(api, limit=args.limit, incremental=not args.full)
 
 
 if __name__ == "__main__":

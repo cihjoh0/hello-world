@@ -12,6 +12,7 @@ import WeatherPanel from '../charts/WeatherPanel';
 import SeasonStandingsPanel from '../charts/SeasonStandingsPanel';
 import TeamRadioPanel from '../charts/TeamRadioPanel';
 import PitStopsPanel from '../charts/PitStopsPanel';
+import RaceControlPanel from '../charts/RaceControlPanel';
 
 export default function Dashboard({ sessionType = 'Race', sessionKey = null, year = new Date().getFullYear() }) {
   return (
@@ -21,6 +22,7 @@ export default function Dashboard({ sessionType = 'Race', sessionKey = null, yea
       <WeekendPacePanel sessionType={sessionType} sessionKey={sessionKey} />
       <PositionChart sessionType={sessionType} sessionKey={sessionKey} />
       <RaceGapChart sessionType={sessionType} sessionKey={sessionKey} />
+      <RaceControlPanel sessionType={sessionType} sessionKey={sessionKey} />
       <BattleTracker sessionType={sessionType} sessionKey={sessionKey} />
       <LapTimeChart sessionType={sessionType} sessionKey={sessionKey} />
       <TireStrategyChart sessionType={sessionType} sessionKey={sessionKey} />

@@ -445,12 +445,18 @@ export default function QualifyingTelemetryPanel({ sessionType = 'Race', session
     const selNums = selected.filter(n => telWithDist[n]?.length > 0);
     if (!selNums.length) return null;
 
-    const refNum = selNums[0];
+    // Reference driver = fastest of the currently-selected group (by lap time),
+    // not selection order — so deselecting/reselecting drivers can't silently
+    // hand zone-boundary detection to a slower lap.
+    const refNum = selNums.reduce((best, num) =>
+      (fastestLaps[num]?.lap_duration ?? Infinity) < (fastestLaps[best]?.lap_duration ?? Infinity) ? num : best
+    , selNums[0]);
+
     const rawZones = detectZones(telWithDist[refNum]);
     if (!rawZones.length) return null;
 
     return { refNum, selNums, zones: summarizeZones(rawZones, telWithDist, selNums) };
-  }, [activeTab, selected, telWithDist]);
+  }, [activeTab, selected, telWithDist, fastestLaps]);
 
   // Speed-vs-distance trace for the zone chart — a finer grid than the
   // zone table needs, so the shaded straight/corner bands read cleanly.

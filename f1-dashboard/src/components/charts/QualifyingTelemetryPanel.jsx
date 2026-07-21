@@ -19,9 +19,10 @@ function fmtLap(s) {
 }
 
 const DRIVER_COLORS = ['#e8002d', '#00a0dd', '#39b54a', '#ff8700'];
-const TABS = ['Speed', 'Throttle & Brake', 'Gear', 'Δ Time', 'Sectors'];
+const TABS = ['Speed', 'Throttle & Brake', 'Gear', 'Δ Time', 'Sectors', 'Straights & Corners'];
 const MAX_DRIVERS = 4;
 const CHART_STEP_S = 0.25; // resample grid every 250 ms
+const MIN_ZONE_LEN_M = 40; // merge shorter blips into the neighbouring zone
 
 // Binary search for the closest telemetry point at time t
 function findClosest(series, t) {
@@ -54,6 +55,7 @@ function extractLapTelemetry(carData, lap) {
       brake:    d.brake ? 100 : 0,
       gear:     d.n_gear   ?? null,
       rpm:      d.rpm      ?? null,
+      drs:      d.drs      ?? null,
     }))
     .sort((a, b) => a.elapsed - b.elapsed);
 }
@@ -83,6 +85,81 @@ function interpElapsed(telDist, targetDist) {
   if (b.dist === a.dist) return a.elapsed;
   const frac = (targetDist - a.dist) / (b.dist - a.dist);
   return a.elapsed + frac * (b.elapsed - a.elapsed);
+}
+
+// Classify a distance-sorted telemetry series into alternating straight-line
+// (full throttle, no brake) and cornering (braking or partial throttle) zones.
+// Short blips shorter than MIN_ZONE_LEN_M are merged into the previous zone
+// to filter out sensor noise / momentary lifts rather than fragmenting corners.
+function detectZones(tel) {
+  if (!tel?.length) return [];
+  const raw = [];
+  let cur = null;
+  for (const p of tel) {
+    const type = (p.throttle ?? 0) >= 99 && !p.brake ? 'straight' : 'corner';
+    if (!cur || cur.type !== type) {
+      if (cur) raw.push(cur);
+      cur = { type, start: p.dist, end: p.dist };
+    } else {
+      cur.end = p.dist;
+    }
+  }
+  if (cur) raw.push(cur);
+
+  const merged = [];
+  for (const z of raw) {
+    if (merged.length && (z.end - z.start) < MIN_ZONE_LEN_M) {
+      merged[merged.length - 1].end = z.end;
+    } else {
+      merged.push({ ...z });
+    }
+  }
+  // Collapse any now-adjacent same-type zones created by the merge above
+  const zones = [];
+  for (const z of merged) {
+    const prev = zones[zones.length - 1];
+    if (prev && prev.type === z.type) prev.end = z.end;
+    else zones.push(z);
+  }
+
+  let sN = 0, cN = 0;
+  return zones.map(z => ({
+    ...z,
+    label: z.type === 'straight' ? `S${++sN}` : `C${++cN}`,
+  }));
+}
+
+// For each reference-driver zone window, pull the matching distance slice out
+// of every selected driver's own telemetry and compute the key comparison
+// metric: top speed reached on straights, apex (minimum) speed and braking
+// point on corners.
+function summarizeZones(zones, telByNum, selNums) {
+  return zones.map(z => {
+    const perDriver = {};
+    for (const num of selNums) {
+      const tel = telByNum[num];
+      const inWindow = tel.filter(p => p.dist >= z.start && p.dist <= z.end);
+      if (!inWindow.length) { perDriver[num] = null; continue; }
+
+      if (z.type === 'straight') {
+        let top = inWindow[0];
+        for (const p of inWindow) if ((p.speed ?? -1) > (top.speed ?? -1)) top = p;
+        perDriver[num] = {
+          topSpeed: top.speed ?? null,
+          drs: inWindow.some(p => (p.drs ?? 0) >= 10),
+        };
+      } else {
+        let apex = inWindow[0];
+        for (const p of inWindow) if ((p.speed ?? Infinity) < (apex.speed ?? Infinity)) apex = p;
+        const brakePt = inWindow.find(p => p.brake);
+        perDriver[num] = {
+          apexSpeed: apex.speed ?? null,
+          brakeAt: brakePt ? Math.round(brakePt.dist - z.start) : null,
+        };
+      }
+    }
+    return { ...z, perDriver };
+  });
 }
 
 // Extract GPS points for a specific lap window
@@ -356,6 +433,21 @@ export default function QualifyingTelemetryPanel({ sessionType = 'Race', session
     return { rows, fastestPerSector, theoBest };
   }, [activeTab, selected, fastestLaps, drivers]);
 
+  // Straight-line vs cornering comparison: zones are detected from the fastest
+  // selected driver's own throttle/brake trace, then every selected driver's
+  // telemetry is sliced into those same distance windows for comparison.
+  const zoneAnalysis = useMemo(() => {
+    if (activeTab !== 'Straights & Corners') return null;
+    const selNums = selected.filter(n => telWithDist[n]?.length > 0);
+    if (!selNums.length) return null;
+
+    const refNum = selNums[0];
+    const rawZones = detectZones(telWithDist[refNum]);
+    if (!rawZones.length) return null;
+
+    return { refNum, selNums, zones: summarizeZones(rawZones, telWithDist, selNums) };
+  }, [activeTab, selected, telWithDist]);
+
   // Circuit map: reference driver's GPS path colored by delta vs 2nd driver
   const circuitMapData = useMemo(() => {
     if (activeTab !== 'Δ Time' || chartData.length === 0) return null;
@@ -524,8 +616,80 @@ export default function QualifyingTelemetryPanel({ sessionType = 'Race', session
             </div>
           )}
 
+          {/* Straights & Corners table */}
+          {activeTab === 'Straights & Corners' && zoneAnalysis && (
+            <div style={{ marginTop: '0.75rem', overflowX: 'auto', maxHeight: 500, overflowY: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: 'left', padding: '4px 8px', color: '#666', fontWeight: 400 }}>Zone</th>
+                    {zoneAnalysis.selNums.map(num => {
+                      const drv = drivers.find(d => d.driver_number === num);
+                      const teamColor = drv?.team_colour ? `#${drv.team_colour}` : '#888';
+                      return (
+                        <th key={num} style={{ textAlign: 'right', padding: '4px 8px', color: teamColor, fontWeight: 600 }}>
+                          {drv?.name_acronym ?? num}
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {zoneAnalysis.zones.map((z, i) => {
+                    const isStraight = z.type === 'straight';
+                    const metricKey = isStraight ? 'topSpeed' : 'apexSpeed';
+                    const nums = zoneAnalysis.selNums
+                      .map(num => z.perDriver[num]?.[metricKey])
+                      .filter(v => v != null);
+                    const best = nums.length ? Math.max(...nums) : null;
+                    return (
+                      <tr key={i} style={{
+                        borderTop: '1px solid #1e1e2e',
+                        background: isStraight ? 'transparent' : 'rgba(255,204,0,0.03)',
+                      }}>
+                        <td style={{ padding: '6px 8px', color: isStraight ? '#3ddc84' : '#ffcc00', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                          {isStraight ? '↑' : '⟲'} {z.label}
+                          <span style={{ color: '#555', fontWeight: 400, marginLeft: 4 }}>
+                            ({Math.round(z.end - z.start)}m)
+                          </span>
+                        </td>
+                        {zoneAnalysis.selNums.map(num => {
+                          const v = z.perDriver[num];
+                          const val = v?.[metricKey];
+                          const isBest = val != null && best != null && val === best;
+                          return (
+                            <td key={num} style={{ textAlign: 'right', padding: '6px 8px', color: isBest ? '#a855f7' : '#ccc', fontWeight: isBest ? 700 : 400 }}>
+                              {val != null ? `${Math.round(val)} km/h` : '—'}
+                              {isStraight && v?.drs && (
+                                <span style={{ color: '#00a0dd', fontSize: 9, marginLeft: 4, fontWeight: 700 }}>DRS</span>
+                              )}
+                              {!isStraight && v?.brakeAt != null && (
+                                <div style={{ fontSize: 9, color: '#555', fontWeight: 400 }}>brk {v.brakeAt}m in</div>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <p className="f1-footnote" style={{ marginTop: '0.5rem' }}>
+                Zones detected from {drivers.find(d => d.driver_number === zoneAnalysis.refNum)?.name_acronym ?? zoneAnalysis.refNum}'s
+                throttle/brake trace (full throttle & no brake = straight). Purple = fastest through that zone.
+                "brk Nm in" = distance into the zone before braking starts.
+              </p>
+            </div>
+          )}
+
+          {activeTab === 'Straights & Corners' && !anyTelLoading && !zoneAnalysis && selected.length > 0 && (
+            <p className="f1-hint" style={{ padding: '1rem', textAlign: 'center' }}>
+              No telemetry available to detect straights and corners for this lap.
+            </p>
+          )}
+
           {/* Chart — shown as soon as any driver's telemetry is available */}
-          {activeTab !== 'Sectors' && chartData.length > 0 && (
+          {activeTab !== 'Sectors' && activeTab !== 'Straights & Corners' && chartData.length > 0 && (
             <ResponsiveContainer width="100%" height={260}>
               <LineChart data={chartData} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" />
@@ -574,7 +738,7 @@ export default function QualifyingTelemetryPanel({ sessionType = 'Race', session
             </ResponsiveContainer>
           )}
 
-          {activeTab !== 'Sectors' && !anyTelLoading && chartData.length === 0 && selected.length > 0 && (
+          {activeTab !== 'Sectors' && activeTab !== 'Straights & Corners' && !anyTelLoading && chartData.length === 0 && selected.length > 0 && (
             <div style={{ padding: '1rem', textAlign: 'center' }}>
               {Object.values(telError).length > 0 ? (
                 <p className="f1-hint">

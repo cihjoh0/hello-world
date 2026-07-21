@@ -1,10 +1,11 @@
 import { useMemo, useState, useEffect } from 'react';
 import {
   ComposedChart, Bar, Line, Cell, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, ReferenceLine,
+  ResponsiveContainer, ReferenceLine, ReferenceArea,
 } from 'recharts';
 import { useOpenF1 } from '../../hooks/useOpenF1';
-import { resolveSession, getDrivers, getLaps, getStints, getPitStops, getPositions } from '../../api/openf1';
+import { resolveSession, getDrivers, getLaps, getStints, getPitStops, getPositions, getRaceControl } from '../../api/openf1';
+import { getSafetyCarPeriods } from '../../utils/raceControl';
 import DashboardPanel from '../dashboard/DashboardPanel';
 import LoadingSpinner from '../ui/LoadingSpinner';
 import ErrorMessage from '../ui/ErrorMessage';
@@ -22,14 +23,15 @@ const COMPOUND_ABBR = { SOFT: 'S', MEDIUM: 'M', HARD: 'H', INTERMEDIATE: 'I', WE
 async function fetchData(sessionType, sessionKey) {
   const session = await resolveSession(sessionType, sessionKey);
   if (!session) throw new Error(`No ${sessionType.toLowerCase()} session found`);
-  const [drivers, laps, stints, pitStops, positions] = await Promise.all([
+  const [drivers, laps, stints, pitStops, positions, raceControl] = await Promise.all([
     getDrivers(session.session_key),
     getLaps(session.session_key),
     getStints(session.session_key),
     getPitStops(session.session_key),
     getPositions(session.session_key),
+    getRaceControl(session.session_key),
   ]);
-  return { session, drivers, laps, stints, pitStops, positions };
+  return { session, drivers, laps, stints, pitStops, positions, raceControl };
 }
 
 function getCompoundAtLap(stintList, lap) {
@@ -77,9 +79,9 @@ export default function BattleTracker({ sessionType = 'Race', sessionKey = null 
   const [driverA, setDriverA] = useState(null);
   const [driverB, setDriverB] = useState(null);
 
-  const { driverRows, lapMap, stintMap, pitSet, defaultA, defaultB, subtitle } = useMemo(() => {
+  const { driverRows, lapMap, stintMap, pitSet, defaultA, defaultB, safetyCarPeriods, subtitle } = useMemo(() => {
     if (!data) return {};
-    const { session, drivers, laps, stints, pitStops, positions } = data;
+    const { session, drivers, laps, stints, pitStops, positions, raceControl } = data;
     const driverMap = Object.fromEntries(drivers.map(d => [d.driver_number, d]));
 
     const lapMap = {};
@@ -128,8 +130,13 @@ export default function BattleTracker({ sessionType = 'Race', sessionKey = null 
 
     const pitSet = new Set((pitStops ?? []).map(p => `${p.driver_number}-${p.lap_number}`));
 
+    // Session-wide max lap (independent of which driver pair is selected)
+    // so SC/VSC shading stays stable as A/B selection changes.
+    const overallMaxLap = laps.reduce((m, l) => Math.max(m, l.lap_number ?? 0), 0);
+    const safetyCarPeriods = getSafetyCarPeriods(raceControl, overallMaxLap);
+
     return {
-      driverRows, lapMap, stintMap, pitSet,
+      driverRows, lapMap, stintMap, pitSet, safetyCarPeriods,
       defaultA: sorted[0] ?? null,
       defaultB: sorted[1] ?? null,
       subtitle: session
@@ -207,6 +214,12 @@ export default function BattleTracker({ sessionType = 'Race', sessionKey = null 
     : '#888';
 
   const maxLap = chartData?.length ? chartData[chartData.length - 1].lap : undefined;
+  const minLap = chartData?.length ? chartData[0].lap : undefined;
+
+  // Clip SC/VSC periods to the lap range actually shown for this driver pair
+  const visibleSafetyCarPeriods = (safetyCarPeriods ?? [])
+    .filter(p => minLap != null && maxLap != null && p.start <= maxLap && p.end >= minLap)
+    .map(p => ({ ...p, start: Math.max(p.start, minLap ?? p.start), end: Math.min(p.end, maxLap ?? p.end) }));
 
   const pitLapsA = chartData?.map(r => r.lap).filter(ln => pitSet?.has(`${activeA}-${ln}`)) ?? [];
   const pitLapsB = chartData?.map(r => r.lap).filter(ln => pitSet?.has(`${activeB}-${ln}`)) ?? [];
@@ -311,6 +324,17 @@ export default function BattleTracker({ sessionType = 'Race', sessionKey = null 
                 <ReferenceLine y={0} stroke="none"
                   label={{ value: `▼ ${codeA} faster`, position: 'insideBottomLeft', fill: '#555', fontSize: 9 }} />
 
+                {visibleSafetyCarPeriods.map((p, i) => (
+                  <ReferenceArea
+                    key={`sc-${i}`}
+                    x1={p.start} x2={p.end}
+                    fill={p.type === 'SC' ? 'rgba(255,215,0,0.08)' : 'rgba(0,160,221,0.08)'}
+                    stroke={p.type === 'SC' ? 'rgba(255,215,0,0.3)' : 'rgba(0,160,221,0.3)'}
+                    strokeWidth={1}
+                    label={{ value: p.type, position: 'insideTop', fill: p.type === 'SC' ? '#ffd700' : '#00a0dd', fontSize: 9 }}
+                  />
+                ))}
+
                 {/* Pit stop reference lines */}
                 {pitLapsA.map(ln => (
                   <ReferenceLine key={`pitA-${ln}`} x={ln} stroke={COLOR_A}
@@ -349,6 +373,7 @@ export default function BattleTracker({ sessionType = 'Race', sessionKey = null 
           <p className="f1-footnote" style={{ marginTop: '0.5rem' }}>
             Green = {codeA ?? 'A'} faster · Red = {codeB ?? 'B'} faster · White line = {ROLLING_N}-lap rolling avg.
             Dashed verticals = pit stops (red = {codeA ?? 'A'}, blue = {codeB ?? 'B'}).
+            Shaded bands = Safety Car (gold) / Virtual Safety Car (blue).
             Hover the tooltip to see compound and tyre age at each lap.
           </p>
         </>

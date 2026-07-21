@@ -5,6 +5,7 @@ import {
 } from 'recharts';
 import { useOpenF1 } from '../../hooks/useOpenF1';
 import { resolveSession, getDrivers, getLaps, getPitStops, getRaceControl, getPositions } from '../../api/openf1';
+import { getSafetyCarPeriods } from '../../utils/raceControl';
 import DashboardPanel from '../dashboard/DashboardPanel';
 import LoadingSpinner from '../ui/LoadingSpinner';
 import ErrorMessage from '../ui/ErrorMessage';
@@ -100,28 +101,7 @@ export default function RaceGapChart({ sessionType = 'Race', sessionKey = null }
       (pitStops ?? []).map(p => `${p.driver_number}-${p.lap_number}`)
     );
 
-    // Parse SC/VSC periods from race control messages
-    const safetyCarPeriods = [];
-    if (raceControl?.length) {
-      let scStart = null, vscStart = null;
-      const rcSorted = [...raceControl].sort((a, b) => (a.lap_number ?? 0) - (b.lap_number ?? 0));
-      for (const rc of rcSorted) {
-        const flag = (rc.flag ?? '').toUpperCase();
-        const lap = rc.lap_number;
-        if (!lap) continue;
-        if (flag.includes('VSC DEPLOYED')) { vscStart = lap; }
-        else if (flag.includes('VSC ENDING') && vscStart != null) {
-          safetyCarPeriods.push({ type: 'VSC', start: vscStart, end: lap });
-          vscStart = null;
-        } else if (flag.includes('SC DEPLOYED')) { scStart = lap; }
-        else if (flag.includes('SC ENDING') && scStart != null) {
-          safetyCarPeriods.push({ type: 'SC', start: scStart, end: lap });
-          scStart = null;
-        }
-      }
-      if (scStart  != null) safetyCarPeriods.push({ type: 'SC',  start: scStart,  end: maxLap });
-      if (vscStart != null) safetyCarPeriods.push({ type: 'VSC', start: vscStart, end: maxLap });
-    }
+    const safetyCarPeriods = getSafetyCarPeriods(raceControl, maxLap);
 
     const s = session;
     return {

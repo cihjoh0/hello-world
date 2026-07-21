@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  Legend, ResponsiveContainer, ReferenceLine,
+  Legend, ResponsiveContainer, ReferenceLine, ReferenceArea,
 } from 'recharts';
 import {
   resolveSession, getQualifyingSession, getDrivers, getLaps, getCarData, getLocation,
@@ -72,19 +72,23 @@ function addDistance(tel) {
   return out;
 }
 
-// Linear interpolation: find elapsed time at targetDist metres
-function interpElapsed(telDist, targetDist) {
+// Linear interpolation: find the value of `field` at targetDist metres
+function interpAt(telDist, targetDist, field) {
   let lo = 0, hi = telDist.length - 1;
   while (lo < hi) {
     const mid = (lo + hi) >> 1;
     if (telDist[mid].dist < targetDist) lo = mid + 1;
     else hi = mid;
   }
-  if (lo === 0) return telDist[0].elapsed;
+  if (lo === 0) return telDist[0][field];
   const a = telDist[lo - 1], b = telDist[lo];
-  if (b.dist === a.dist) return a.elapsed;
+  if (b.dist === a.dist) return a[field];
   const frac = (targetDist - a.dist) / (b.dist - a.dist);
-  return a.elapsed + frac * (b.elapsed - a.elapsed);
+  return a[field] + frac * (b[field] - a[field]);
+}
+
+function interpElapsed(telDist, targetDist) {
+  return interpAt(telDist, targetDist, 'elapsed');
 }
 
 // Classify a distance-sorted telemetry series into alternating straight-line
@@ -448,6 +452,25 @@ export default function QualifyingTelemetryPanel({ sessionType = 'Race', session
     return { refNum, selNums, zones: summarizeZones(rawZones, telWithDist, selNums) };
   }, [activeTab, selected, telWithDist]);
 
+  // Speed-vs-distance trace for the zone chart — a finer grid than the
+  // zone table needs, so the shaded straight/corner bands read cleanly.
+  const zoneChartData = useMemo(() => {
+    if (!zoneAnalysis) return [];
+    const { selNums } = zoneAnalysis;
+    const maxDist = Math.min(...selNums.map(n => telWithDist[n]?.at(-1)?.dist ?? 0));
+    const DIST_STEP = 25; // metres
+    const points = [];
+    for (let d = 0; d <= maxDist; d += DIST_STEP) {
+      const row = { dist: Math.round(d) };
+      for (const num of selNums) {
+        const idx = selected.indexOf(num);
+        row[`d${idx}`] = Math.round(interpAt(telWithDist[num], d, 'speed') ?? 0);
+      }
+      points.push(row);
+    }
+    return points;
+  }, [zoneAnalysis, telWithDist, selected]);
+
   // Circuit map: reference driver's GPS path colored by delta vs 2nd driver
   const circuitMapData = useMemo(() => {
     if (activeTab !== 'Δ Time' || chartData.length === 0) return null;
@@ -616,9 +639,53 @@ export default function QualifyingTelemetryPanel({ sessionType = 'Race', session
             </div>
           )}
 
-          {/* Straights & Corners table */}
+          {/* Straights & Corners: speed trace with zone shading, then the table */}
+          {activeTab === 'Straights & Corners' && zoneAnalysis && zoneChartData.length > 0 && (
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={zoneChartData} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" />
+                <XAxis
+                  dataKey="dist"
+                  tick={{ fill: '#888', fontSize: 10 }}
+                  label={{ value: 'Distance (m)', position: 'insideBottomRight', offset: -8, fill: '#555', fontSize: 10 }}
+                />
+                <YAxis
+                  tick={{ fill: '#888', fontSize: 10 }}
+                  width={42}
+                  label={{ value: 'km/h', angle: -90, position: 'insideLeft', fill: '#555', fontSize: 10 }}
+                />
+                <Tooltip
+                  contentStyle={{ background: '#13131f', border: '1px solid #2a2a3e', fontSize: 11 }}
+                  formatter={v => v == null ? '—' : `${v} km/h`}
+                />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                {zoneAnalysis.zones.map((z, i) => (
+                  <ReferenceArea
+                    key={i}
+                    x1={z.start} x2={z.end}
+                    fill={z.type === 'straight' ? 'rgba(61,220,132,0.06)' : 'rgba(255,204,0,0.06)'}
+                    stroke="none"
+                  />
+                ))}
+                {zoneAnalysis.selNums.map(num => {
+                  const drv  = drivers.find(d => d.driver_number === num);
+                  const code = drv?.name_acronym ?? num;
+                  return (
+                    <Line key={num} dataKey={`d${selected.indexOf(num)}`} name={code}
+                      stroke={DRIVER_COLORS[selected.indexOf(num)]} dot={false} strokeWidth={1.5}
+                      connectNulls isAnimationActive={false} />
+                  );
+                })}
+              </LineChart>
+            </ResponsiveContainer>
+          )}
           {activeTab === 'Straights & Corners' && zoneAnalysis && (
-            <div style={{ marginTop: '0.75rem', overflowX: 'auto', maxHeight: 500, overflowY: 'auto' }}>
+            <>
+            <p className="f1-hint" style={{ padding: '0.25rem 0 0' }}>
+              <span style={{ color: '#3ddc84' }}>■</span> Straight-line zones &nbsp;
+              <span style={{ color: '#ffcc00' }}>■</span> Cornering zones
+            </p>
+            <div style={{ marginTop: '0.5rem', overflowX: 'auto', maxHeight: 500, overflowY: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                 <thead>
                   <tr>
@@ -680,6 +747,7 @@ export default function QualifyingTelemetryPanel({ sessionType = 'Race', session
                 "brk Nm in" = distance into the zone before braking starts.
               </p>
             </div>
+            </>
           )}
 
           {activeTab === 'Straights & Corners' && !anyTelLoading && !zoneAnalysis && selected.length > 0 && (

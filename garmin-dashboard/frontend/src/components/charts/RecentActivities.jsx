@@ -3,8 +3,19 @@ import { fetchActivities } from "../../api/garmin";
 import LoadingSpinner from "../ui/LoadingSpinner";
 import ErrorMessage from "../ui/ErrorMessage";
 
+function timeAgo(dateStr) {
+  if (!dateStr) return "";
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const h = Math.floor(diff / 3600000);
+  if (h < 1) return "just now";
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}d ago`;
+  return `${Math.floor(d / 30)}mo ago`;
+}
+
 function fmtDuration(s) {
-  if (!s) return "—";
+  if (!s) return null;
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   const sec = Math.floor(s % 60);
@@ -12,9 +23,28 @@ function fmtDuration(s) {
   return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
-function fmtDate(iso) {
-  if (!iso) return "—";
-  return iso.slice(0, 10);
+function ActivityCard({ activity }) {
+  const { name, start_time, distance_km, duration_s, pace, avg_hr } = activity;
+  const duration = fmtDuration(duration_s);
+
+  return (
+    <div className="activity-card">
+      <div className="card-avatar">🏃</div>
+      <div className="card-info">
+        <div className="card-name">{name || "Run"}</div>
+        <div className="card-sub">
+          <span>📍</span>
+          {distance_km ? `${distance_km} km` : "—"}
+          {duration && <>&nbsp;·&nbsp;{duration}</>}
+          {start_time && <>&nbsp;·&nbsp;{timeAgo(start_time)}</>}
+        </div>
+      </div>
+      <div className="card-badge">
+        <div className="badge-value">{pace ?? "—"}</div>
+        <div className="badge-label">{avg_hr ? `♥ ${Math.round(avg_hr)}` : "min/km"}</div>
+      </div>
+    </div>
+  );
 }
 
 export default function RecentActivities({ limit = 15 }) {
@@ -29,35 +59,13 @@ export default function RecentActivities({ limit = 15 }) {
 
   if (error) return <ErrorMessage message={error} />;
   if (!activities) return <LoadingSpinner />;
+  if (!activities.length) return <p className="no-data">No activities yet.</p>;
 
   return (
-    <div className="table-scroll">
-      <table className="activity-table">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Name</th>
-            <th>Distance</th>
-            <th>Time</th>
-            <th>Pace</th>
-            <th>Avg HR</th>
-            <th>Elevation</th>
-          </tr>
-        </thead>
-        <tbody>
-          {activities.map((a) => (
-            <tr key={a.activity_id}>
-              <td className="td-date">{fmtDate(a.start_time)}</td>
-              <td className="td-name">{a.name || "Run"}</td>
-              <td className="td-num">{a.distance_km ?? "—"} km</td>
-              <td className="td-num">{fmtDuration(a.duration_s)}</td>
-              <td className="td-num td-accent">{a.pace ? `${a.pace} /km` : "—"}</td>
-              <td className="td-num">{a.avg_hr ? `${Math.round(a.avg_hr)} bpm` : "—"}</td>
-              <td className="td-num">{a.elevation_gain ? `${Math.round(a.elevation_gain)} m` : "—"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="activity-cards">
+      {activities.map((a) => (
+        <ActivityCard key={a.activity_id} activity={a} />
+      ))}
     </div>
   );
 }

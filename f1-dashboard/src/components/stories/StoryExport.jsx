@@ -2,8 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import html2canvas from 'html2canvas';
 import {
   resolveSession, getDrivers, getLaps,
-  getStints, getPitStops, getPositions,
+  getStints, getPitStops, getPositions, getRaceControl,
 } from '../../api/openf1';
+import { detectOvertakes } from '../../utils/overtakes';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -37,12 +38,13 @@ function useStoryData(sessionType, sessionKey = null) {
         if (!session) throw new Error('No session found');
         const key = session.session_key;
 
-        const [drivers, laps, stints, pitStops, positions] = await Promise.all([
+        const [drivers, laps, stints, pitStops, positions, raceControl] = await Promise.all([
           getDrivers(key),
           getLaps(key),
           getStints(key),
           getPitStops(key),
           getPositions(key),
+          getRaceControl(key),
         ]);
 
         if (!session) throw new Error(`No ${sessionType.toLowerCase()} session found`);
@@ -116,6 +118,8 @@ function useStoryData(sessionType, sessionKey = null) {
           }
         });
 
+        const { overtakes } = detectOvertakes({ drivers, laps, pitStops, raceControl });
+
         setState({
           loading: false,
           error: null,
@@ -130,6 +134,7 @@ function useStoryData(sessionType, sessionKey = null) {
             pitsSorted,
             startPos,
             allPitStops: pitStops,
+            overtakes,
           },
         });
       } catch (e) {
@@ -402,7 +407,7 @@ function PitStopsCard({ session, pitsSorted }) {
 // ── Storyline generator ───────────────────────────────────────────────────────
 
 function generateStorylines(data, label) {
-  const { session, result, fastestLap, pitsSorted, startPos, allPitStops, driverMap } = data;
+  const { session, result, fastestLap, pitsSorted, startPos, allPitStops, driverMap, overtakes } = data;
   const loc = session?.location ?? '';
   const tag = `#${loc.replace(/\s+/g, '')}GP`;
   const lines = [];
@@ -433,7 +438,23 @@ function generateStorylines(data, label) {
     });
   }
 
-  // 3. Fastest lap
+  // 3. Best overtake — a pass for the lead if one happened, else the biggest
+  // pace-advantage move of the race
+  if (overtakes?.length) {
+    const leadChanges = overtakes.filter(o => o.posAfter === 1);
+    const best = (leadChanges.length ? leadChanges : overtakes)
+      .reduce((a, b) => (b.paceDelta < a.paceDelta ? b : a));
+    const attacker = driverMap[best.attacker];
+    const defender = driverMap[best.defender];
+    const forLead = best.posAfter === 1 ? ' for the lead' : ` for P${best.posAfter}`;
+    lines.push({
+      icon: '🔥',
+      headline: `${attacker?.name_acronym} passes ${defender?.name_acronym}${forLead}`,
+      text: `🔥 MOVE OF THE RACE | ${loc} ${label}\n\n${attacker?.name_acronym ?? '?'} passed ${defender?.name_acronym ?? '?'}${forLead} on Lap ${best.lap}, carrying a ${Math.abs(best.paceDelta).toFixed(2)}s pace advantage that lap.\n\n#F1 #Overtake ${tag}`,
+    });
+  }
+
+  // 4. Fastest lap
   if (fastestLap) {
     lines.push({
       icon: '⚡',
@@ -442,7 +463,7 @@ function generateStorylines(data, label) {
     });
   }
 
-  // 4. Fastest pit stop
+  // 5. Fastest pit stop
   const best = pitsSorted[0];
   if (best) {
     lines.push({
@@ -452,7 +473,7 @@ function generateStorylines(data, label) {
     });
   }
 
-  // 5. Strategy split (1-stop vs 2-stop)
+  // 6. Strategy split (1-stop vs 2-stop)
   const stopCount = {};
   (allPitStops ?? []).forEach(p => {
     stopCount[p.driver_number] = (stopCount[p.driver_number] ?? 0) + 1;

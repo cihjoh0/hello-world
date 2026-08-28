@@ -15,6 +15,7 @@ import PitStopsPanel from '../charts/PitStopsPanel';
 import RaceControlPanel from '../charts/RaceControlPanel';
 import OvertakesPanel from '../charts/OvertakesPanel';
 import CircuitOvertakeStatsPanel from '../charts/CircuitOvertakeStatsPanel';
+import OvertakeLeaderboardPanel from '../charts/OvertakeLeaderboardPanel';
 
 export default function Dashboard({ sessionType = 'Race', sessionKey = null, year = new Date().getFullYear() }) {
   return (
@@ -35,6 +36,7 @@ export default function Dashboard({ sessionType = 'Race', sessionKey = null, yea
       <PitWindowPanel sessionType={sessionType} sessionKey={sessionKey} />
       <QualifyingTelemetryPanel sessionType={sessionType} sessionKey={sessionKey} />
       <SeasonStandingsPanel year={year} />
+      <OvertakeLeaderboardPanel year={year} />
       <FastF1Panel sessionType={sessionType} />
     </div>
   );

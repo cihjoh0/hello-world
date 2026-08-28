@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { detectOvertakes } from '../utils/overtakes';
 
 const BASE_URL = 'https://api.openf1.org/v1';
 
@@ -177,4 +178,22 @@ export async function getLocation(sessionKey, driverNumber) {
 // Team radio recordings for a session — returns {date, driver_number, recording_url}.
 export async function getTeamRadio(sessionKey) {
   return listGet('/team_radio', { session_key: sessionKey });
+}
+
+// All race sessions ever held at a given circuit (across every year available).
+export async function getSessionsByLocation(location, sessionType = 'Race') {
+  return listGet('/sessions', { location, session_type: sessionType });
+}
+
+// Fetches everything detectOvertakes needs for one session and runs it.
+// Used by features that aggregate overtakes across many sessions (circuit
+// history, season leaderboard) so they don't each re-compose the same fetch.
+export async function getOvertakesForSession(sessionKey) {
+  const [drivers, laps, pitStops, raceControl] = await Promise.all([
+    getDrivers(sessionKey),
+    getLaps(sessionKey),
+    getPitStops(sessionKey),
+    getRaceControl(sessionKey),
+  ]);
+  return detectOvertakes({ drivers, laps, pitStops, raceControl });
 }

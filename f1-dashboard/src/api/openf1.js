@@ -12,10 +12,13 @@ const cache = new Map();
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 // Global concurrency limiter — cap in-flight HTTP requests to avoid 429s.
-// With ~30 panels loading simultaneously on mount, uncapped requests exhaust
-// the OpenF1 rate limit faster than exponential backoff can recover.
+// The dashboard has grown to ~19 panels on mount, several of them (Weekend
+// Analysis, Qualifying Telemetry) firing multiple cross-session requests
+// each that can't be deduped by the cache below (different session_key per
+// request). Total request volume on initial load has grown enough that the
+// previous 2 req/sec pacing started producing 429s again — slowed further.
 const MAX_CONCURRENT = 2;
-const REQUEST_GAP_MS = 500; // stagger request starts (~2/sec max)
+const REQUEST_GAP_MS = 750; // stagger request starts (~1.3/sec max)
 let _active = 0;
 const _queue = [];
 let _rateLimitUntil = 0; // absolute ms timestamp: pause all requests until this time
@@ -52,7 +55,7 @@ function cacheKey(path, params) {
   return path + '?' + new URLSearchParams(params).toString();
 }
 
-async function fetchWithRetry(path, params, retries = 4) {
+async function fetchWithRetry(path, params, retries = 6) {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const { data } = await withConcurrencyLimit(() => client.get(path, { params }));

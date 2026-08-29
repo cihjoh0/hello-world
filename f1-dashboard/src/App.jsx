@@ -25,7 +25,25 @@ export default function App() {
     Promise.all([
       getSessions(year, 'Race'),
       getSessions(year, 'Sprint'),
-    ]).then(([races, sprints]) => {
+    ]).then(([raceTypeSessions, sprintTypeSessions]) => {
+      // OpenF1 categorizes the Sprint race itself under session_type "Race"
+      // (session_name is what actually says "Sprint" vs "Race") — the same
+      // reason WeekendPacePanel has to fall back to session_name to tell
+      // Sprint Qualifying apart from regular Qualifying. Trusting
+      // session_type alone here mislabels the Sprint as the Race (it sorts
+      // first, Saturday vs Sunday, and wins the dedup below) and leaves the
+      // Sprint session_type query empty, permanently disabling the Sprint
+      // toggle. Merge both queries and re-classify by session_name instead.
+      const byKey = new Map();
+      for (const s of [...raceTypeSessions, ...sprintTypeSessions]) byKey.set(s.session_key, s);
+      const allSessions = [...byKey.values()];
+
+      const isSprintRace = s => /sprint/i.test(s.session_name ?? '') && !/qualifying|shootout/i.test(s.session_name ?? '');
+      const isMainRace = s => !isSprintRace(s) && /race/i.test(s.session_name ?? s.session_type ?? '');
+
+      const sprints = allSessions.filter(isSprintRace);
+      const races = allSessions.filter(isMainRace);
+
       const sprintByMeeting = {};
       for (const s of sprints) sprintByMeeting[s.meeting_key] = s.session_key;
 

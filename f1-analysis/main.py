@@ -70,20 +70,27 @@ def get_session_info(year: int, round_: int, session_type: str = Query("R")):
     """Return event metadata for a session."""
     try:
         session = load_session(year, round_, session_type)
+        # load_session() can return a session object even when FastF1's
+        # internal fetch partially failed (e.g. a network hiccup) — it logs
+        # a warning rather than raising, and only accessing the unpopulated
+        # data raises DataNotLoadedError. Access it inside this same try
+        # block so that case reports a clean error instead of a raw 500.
+        laps_empty = session.laps.empty
+        result = {
+            "year": year,
+            "round": round_,
+            "session_type": session_type,
+            "event_name": session.event.get("EventName", ""),
+            "location": session.event.get("Location", ""),
+            "country": session.event.get("Country", ""),
+            "date": str(session.date.date()) if session.date else None,
+            "total_laps": int(session.laps["LapNumber"].max()) if not laps_empty else None,
+            "drivers": sorted(session.laps["Driver"].unique().tolist()) if not laps_empty else [],
+        }
     except Exception as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=503, detail=f"Session data unavailable: {e}")
 
-    return {
-        "year": year,
-        "round": round_,
-        "session_type": session_type,
-        "event_name": session.event.get("EventName", ""),
-        "location": session.event.get("Location", ""),
-        "country": session.event.get("Country", ""),
-        "date": str(session.date.date()) if session.date else None,
-        "total_laps": int(session.laps["LapNumber"].max()) if not session.laps.empty else None,
-        "drivers": sorted(session.laps["Driver"].unique().tolist()),
-    }
+    return result
 
 
 # ── Analysis endpoints ─────────────────────────────────────────────────────────

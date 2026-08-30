@@ -19,10 +19,10 @@ jobs:
       - name: Install dependencies
         run: pip install -r backend/requirements.txt
 
-      - name: Restore garth session
+      - name: Restore Garmin tokens
         run: |
-          mkdir -p ~/.garth
-          echo "${{ secrets.GARTH_SESSION }}" | base64 -d > ~/.garth/oauth2_token
+          mkdir -p ~/.garminconnect
+          echo "${{ secrets.GARMIN_TOKENS }}" | base64 -d > ~/.garminconnect/garmin_tokens.json
 
       - name: Sync activities
         run: python backend/fetch.py --limit 500

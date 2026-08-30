@@ -456,10 +456,11 @@ const TABS = [
 ];
 
 export default function FastF1Panel({ sessionType = 'Race' }) {
-  const [status, setStatus]           = useState('loading'); // loading | offline | ready
-  const [coords, setCoords]           = useState(null);
-  const [sessionInfo, setSessionInfo] = useState(null);
-  const [activeTab, setActiveTab]     = useState('deg');
+  const [status, setStatus]             = useState('loading'); // loading | offline | ready
+  const [coords, setCoords]             = useState(null);
+  const [sessionInfo, setSessionInfo]   = useState(null);
+  const [activeTab, setActiveTab]       = useState('deg');
+  const [offlineReason, setOfflineReason] = useState(null);
 
   // Map frontend session type to FastF1 session code
   const f1Code = sessionType === 'Sprint' ? 'S' : 'R';
@@ -468,10 +469,19 @@ export default function FastF1Panel({ sessionType = 'Race' }) {
     setStatus('loading');
     setCoords(null);
     setSessionInfo(null);
+    setOfflineReason(null);
     getLatestRaceCoords(f1Code)
       .then(c => { setCoords(c); return getSessionInfo(c.year, c.round, f1Code); })
       .then(info => { setSessionInfo(info); setStatus('ready'); })
-      .catch(() => setStatus('offline'));
+      .catch(e => {
+        // A network-level failure (fetch can't even reach the server) throws
+        // a TypeError with no useful message; an HTTP error response from
+        // the server (e.g. 503 when FastF1's upstream data is unavailable)
+        // carries a real detail message via analysis.js's get() helper.
+        // Surface the real reason instead of always assuming "not running".
+        setOfflineReason(e instanceof TypeError ? null : (e?.message ?? null));
+        setStatus('offline');
+      });
   }, [f1Code]);
 
   const subtitle = sessionInfo
@@ -485,13 +495,21 @@ export default function FastF1Panel({ sessionType = 'Race' }) {
       {status === 'offline' && (
         <>
           <div className="f1-offline">
-            <p className="f1-offline-title">Analysis server not running</p>
-            <code className="f1-offline-cmd">
-              cd f1-analysis &amp;&amp; uvicorn main:app --reload --port 8000
-            </code>
-            <p className="f1-offline-note">
-              Requires the FastF1 Python layer from <code>f1-analysis/</code>
+            <p className="f1-offline-title">
+              {offlineReason ? 'Analysis server reachable, but data unavailable' : 'Analysis server not running'}
             </p>
+            {offlineReason ? (
+              <p className="f1-offline-note">{offlineReason}</p>
+            ) : (
+              <>
+                <code className="f1-offline-cmd">
+                  cd f1-analysis &amp;&amp; uvicorn main:app --reload --port 8000
+                </code>
+                <p className="f1-offline-note">
+                  Requires the FastF1 Python layer from <code>f1-analysis/</code>
+                </p>
+              </>
+            )}
           </div>
           <div className="f1-tabs" style={{ marginTop: '1rem' }}>
             <button

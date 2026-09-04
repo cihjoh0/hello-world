@@ -17,6 +17,7 @@ Undercut requires `driver_a`, `driver_b`, `pit_lap`.
 """
 
 from contextlib import asynccontextmanager
+import os
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -41,13 +42,16 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Deployed frontend origins go in ALLOWED_ORIGINS (comma-separated env var)
+# rather than hardcoded here, so pointing this backend at a different
+# frontend deployment — or adding one — is a config change, not a code
+# change and redeploy. Local dev origins are always allowed on top of that.
+_DEV_ORIGINS = ["http://localhost:5173", "http://localhost:4173", "http://localhost:3000"]
+_extra_origins = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",   # Vite dev server
-        "http://localhost:4173",   # Vite preview
-        "http://localhost:3000",
-    ],
+    allow_origins=_DEV_ORIGINS + _extra_origins,
     allow_methods=["GET"],
     allow_headers=["*"],
 )

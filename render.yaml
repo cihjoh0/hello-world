@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: f1-analysis
+    runtime: docker
+    rootDir: f1-analysis
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /ha/ping
+    envVars:
+      # Set to the deployed frontend's URL after the first deploy, e.g.
+      # https://your-app.vercel.app (comma-separate multiple origins).
+      - key: ALLOWED_ORIGINS
+        sync: false

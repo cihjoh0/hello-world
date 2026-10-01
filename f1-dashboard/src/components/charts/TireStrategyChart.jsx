@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useOpenF1 } from '../../hooks/useOpenF1';
-import { resolveSession, getDrivers, getStints, getPositions } from '../../api/openf1';
+import { resolveSession, getDrivers, getStints, getPositions, getRaceControl } from '../../api/openf1';
+import { getSafetyCarPeriods } from '../../utils/raceControl';
 import DashboardPanel from '../dashboard/DashboardPanel';
 import LoadingSpinner from '../ui/LoadingSpinner';
 import ErrorMessage from '../ui/ErrorMessage';
@@ -22,12 +23,13 @@ const FALLBACK = { bg: '#444', fg: '#fff' };
 async function fetchStrategyData(sessionType, sessionKey) {
   const session = await resolveSession(sessionType, sessionKey);
   if (!session) throw new Error(`No ${sessionType.toLowerCase()} session found`);
-  const [drivers, stints, positions] = await Promise.all([
+  const [drivers, stints, positions, raceControl] = await Promise.all([
     getDrivers(session.session_key),
     getStints(session.session_key),
     getPositions(session.session_key),
+    getRaceControl(session.session_key),
   ]);
-  return { session, drivers, stints, positions };
+  return { session, drivers, stints, positions, raceControl };
 }
 
 function buildRows(drivers, stints, positions = []) {
@@ -91,6 +93,25 @@ function LapAxis({ totalLaps }) {
   );
 }
 
+// Translucent overlay layered on top of a driver's stint bars, marking a
+// Safety Car / VSC lap range. Stint bars are opaque and contiguous — a
+// background tint would be fully hidden behind them — so this renders on
+// top instead, with pointer-events disabled so stint-bar hover/tooltips
+// still work underneath.
+function SafetyCarOverlay({ period, totalLaps }) {
+  const left  = ((period.start - 1) / totalLaps) * 100;
+  const width = ((period.end - period.start + 1) / totalLaps) * 100;
+  return (
+    <div
+      className="strategy-sc-overlay"
+      style={{
+        left: `${left}%`, width: `${width}%`,
+        background: period.type === 'SC' ? 'rgba(255,215,0,0.3)' : 'rgba(0,160,221,0.3)',
+      }}
+    />
+  );
+}
+
 function StintBar({ stint, totalLaps }) {
   const lapStart = stint.lap_start ?? 1;
   const lapEnd   = stint.lap_end   ?? lapStart;
@@ -124,13 +145,14 @@ function StintBar({ stint, totalLaps }) {
 export default function TireStrategyChart({ sessionType = 'Race', sessionKey = null }) {
   const { data, loading, error } = useOpenF1(() => fetchStrategyData(sessionType, sessionKey), [sessionType, sessionKey]);
 
-  const { rows, totalLaps, subtitle } = useMemo(() => {
+  const { rows, totalLaps, safetyCarPeriods, subtitle } = useMemo(() => {
     if (!data) return {};
     const { rows, totalLaps } = buildRows(data.drivers, data.stints, data.positions);
     const s = data.session;
     return {
       rows,
       totalLaps,
+      safetyCarPeriods: getSafetyCarPeriods(data.raceControl, totalLaps),
       subtitle: s ? `${s.location ?? ''} · ${s.year ?? ''} · Round ${s.round_number ?? '?'}` : undefined,
     };
   }, [data]);
@@ -165,6 +187,9 @@ export default function TireStrategyChart({ sessionType = 'Race', sessionKey = n
                   {stints.map((stint) => (
                     <StintBar key={stint.stint_number} stint={stint} totalLaps={totalLaps} />
                   ))}
+                  {safetyCarPeriods.map((p, i) => (
+                    <SafetyCarOverlay key={i} period={p} totalLaps={totalLaps} />
+                  ))}
                 </div>
               </div>
             ))}
@@ -174,6 +199,12 @@ export default function TireStrategyChart({ sessionType = 'Race', sessionKey = n
             <span>Lap 1</span>
             <span>Lap {totalLaps}</span>
           </div>
+
+          {safetyCarPeriods.length > 0 && (
+            <p className="f1-footnote" style={{ marginTop: '0.25rem' }}>
+              Shaded bands mark Safety Car (gold) and Virtual Safety Car (blue) periods.
+            </p>
+          )}
         </div>
       )}
     </DashboardPanel>

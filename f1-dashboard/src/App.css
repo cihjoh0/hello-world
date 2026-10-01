@@ -351,6 +351,15 @@
   user-select: none;
 }
 
+/* Layered on top of stint bars (which are opaque and contiguous, so a
+   background tint would never show through) to mark SC/VSC lap ranges. */
+.strategy-sc-overlay {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  pointer-events: none;
+}
+
 .strategy-lap-range {
   display: flex;
   justify-content: space-between;

@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, ReferenceLine,
+  ResponsiveContainer, ReferenceLine, ReferenceArea,
 } from 'recharts';
 import { useOpenF1 } from '../../hooks/useOpenF1';
-import { resolveSession, getDrivers, getLaps, getPositions } from '../../api/openf1';
+import { resolveSession, getDrivers, getLaps, getPositions, getRaceControl } from '../../api/openf1';
+import { getSafetyCarPeriods } from '../../utils/raceControl';
 import DashboardPanel from '../dashboard/DashboardPanel';
 import LoadingSpinner from '../ui/LoadingSpinner';
 import ErrorMessage from '../ui/ErrorMessage';
@@ -14,12 +15,13 @@ const DEFAULT_SHOWN = 10;
 async function fetchData(sessionType, sessionKey) {
   const session = await resolveSession(sessionType, sessionKey);
   if (!session) throw new Error(`No ${sessionType.toLowerCase()} session found`);
-  const [drivers, laps, positions] = await Promise.all([
+  const [drivers, laps, positions, raceControl] = await Promise.all([
     getDrivers(session.session_key),
     getLaps(session.session_key),
     getPositions(session.session_key),
+    getRaceControl(session.session_key),
   ]);
-  return { session, drivers, laps, positions };
+  return { session, drivers, laps, positions, raceControl };
 }
 
 // Latest position for a driver at or before targetMs (binary search)
@@ -41,9 +43,9 @@ export default function PositionChart({ sessionType = 'Race', sessionKey = null 
 
   const [selected, setSelected] = useState(null);
 
-  const { chartData, driverRows, subtitle } = useMemo(() => {
+  const { chartData, driverRows, safetyCarPeriods, subtitle } = useMemo(() => {
     if (!data) return {};
-    const { session, drivers, laps, positions } = data;
+    const { session, drivers, laps, positions, raceControl } = data;
     const driverMap = Object.fromEntries(drivers.map(d => [d.driver_number, d]));
 
     // lap lookup: driverNum → lapNum → { t0 (ms), dur (s) }
@@ -103,6 +105,7 @@ export default function PositionChart({ sessionType = 'Race', sessionKey = null 
     return {
       chartData,
       driverRows,
+      safetyCarPeriods: getSafetyCarPeriods(raceControl, maxLap),
       subtitle: session
         ? `${session.location ?? ''} · ${session.year ?? ''} · Round ${session.round_number ?? '?'}`
         : undefined,
@@ -174,6 +177,16 @@ export default function PositionChart({ sessionType = 'Race', sessionKey = null 
               />
               <ReferenceLine y={1} stroke="#ffd700" strokeDasharray="4 2" strokeWidth={1}
                 label={{ value: 'Lead', position: 'insideTopRight', fill: '#666', fontSize: 9 }} />
+              {(safetyCarPeriods ?? []).map((p, i) => (
+                <ReferenceArea
+                  key={`sc-${i}`}
+                  x1={p.start} x2={p.end}
+                  fill={p.type === 'SC' ? 'rgba(255,215,0,0.08)' : 'rgba(0,160,221,0.08)'}
+                  stroke={p.type === 'SC' ? 'rgba(255,215,0,0.3)' : 'rgba(0,160,221,0.3)'}
+                  strokeWidth={1}
+                  label={{ value: p.type, position: 'insideTop', fill: p.type === 'SC' ? '#ffd700' : '#00a0dd', fontSize: 9 }}
+                />
+              ))}
               {activeRows.map(({ num, drv, color, isDashed }) => (
                 <Line
                   key={num}
@@ -194,6 +207,7 @@ export default function PositionChart({ sessionType = 'Race', sessionKey = null 
           <p className="f1-footnote" style={{ marginTop: '0.5rem' }}>
             On-track positions from live timing data, sampled at each driver's lap crossing.
             Dashed lines = teammate. Click chips to show/hide drivers.
+            {safetyCarPeriods?.length > 0 && ' Shaded bands mark Safety Car (gold) and Virtual Safety Car (blue) periods.'}
           </p>
         </>
       )}

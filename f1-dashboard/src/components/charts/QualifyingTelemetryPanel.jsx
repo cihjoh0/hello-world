@@ -19,10 +19,11 @@ function fmtLap(s) {
 }
 
 const DRIVER_COLORS = ['#e8002d', '#00a0dd', '#39b54a', '#ff8700'];
-const TABS = ['Speed', 'Throttle & Brake', 'Gear', 'Δ Time', 'Sectors', 'Straights & Corners'];
+const TABS = ['Speed', 'Throttle & Brake', 'Gear', 'Δ Time', 'Sectors', 'Straights & Corners', 'Track Dominance'];
 const MAX_DRIVERS = 4;
 const CHART_STEP_S = 0.25; // resample grid every 250 ms
 const MIN_ZONE_LEN_M = 40; // merge shorter blips into the neighbouring zone
+const DOMINANCE_SECTORS = 25; // mini-sectors per lap, like broadcast track-dominance graphics
 
 // Binary search for the closest telemetry point at time t
 function findClosest(series, t) {
@@ -224,6 +225,37 @@ function CircuitMap({ path, segs, refCode, cmpCode }) {
         <span><span style={{ color: '#e8002d' }}>■</span> {cmpCode} faster</span>
       </div>
     </div>
+  );
+}
+
+// Track dominance map: the reference driver's GPS lap split into mini-sectors,
+// each drawn in the colour of whichever selected driver was fastest through it.
+function DominanceMap({ sectors, colorFor }) {
+  const W = 420, H = 260, PAD = 16;
+  const allPts = sectors.flatMap(s => s.points);
+  const xs = allPts.map(p => p.x), ys = allPts.map(p => p.y);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs);
+  const y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const sx = (W - 2 * PAD) / Math.max(x1 - x0, 1);
+  const sy = (H - 2 * PAD) / Math.max(y1 - y0, 1);
+  const sc = Math.min(sx, sy);
+  const ox = PAD + ((W - 2 * PAD) - (x1 - x0) * sc) / 2;
+  const oy = PAD + ((H - 2 * PAD) - (y1 - y0) * sc) / 2;
+  const px = x => (ox + (x - x0) * sc).toFixed(1);
+  const py = y => (H - oy - (y - y0) * sc).toFixed(1); // flip Y axis
+
+  return (
+    <svg width={W} height={H} style={{ display: 'block', margin: '0 auto', borderRadius: 8, background: '#0d0d14' }}>
+      {sectors.map((s, i) => (
+        <polyline
+          key={i}
+          points={s.points.map(p => `${px(p.x)},${py(p.y)}`).join(' ')}
+          fill="none" stroke={colorFor(s.fastest)} strokeWidth={6}
+          strokeLinecap="round" strokeLinejoin="round"
+        />
+      ))}
+      <circle cx={px(sectors[0].points[0].x)} cy={py(sectors[0].points[0].y)} r={5} fill="#fff" opacity={0.6} />
+    </svg>
   );
 }
 
@@ -507,6 +539,57 @@ export default function QualifyingTelemetryPanel({ sessionType = 'Race', session
     return { path: refPath, segs, refCode: refDrv?.name_acronym ?? refNum, cmpCode: cmpDrv?.name_acronym ?? cmpNum };
   }, [activeTab, chartData, selected, locData, drivers]);
 
+  // Track dominance: split the fastest selected driver's GPS lap into
+  // mini-sectors and find, for each, which selected driver covered it in the
+  // least time. Boundaries are placed at the same *fraction* of every
+  // driver's own lap distance (speed-integrated distance drifts slightly
+  // between drivers, so shared absolute metres would misalign later sectors).
+  const trackDominance = useMemo(() => {
+    if (activeTab !== 'Track Dominance') return null;
+    const selNums = selected.filter(n => telWithDist[n]?.length > 1 && locData[n]?.length > 1);
+    if (selNums.length < 2) return null;
+
+    const refNum = selNums.reduce((best, num) =>
+      (fastestLaps[num]?.lap_duration ?? Infinity) < (fastestLaps[best]?.lap_duration ?? Infinity) ? num : best
+    , selNums[0]);
+    const refPath = locData[refNum];
+    const gpsTotal = refPath.at(-1).dist;
+    if (!(gpsTotal > 0)) return null;
+
+    // Nearest GPS point index for each of the N+1 sector boundaries
+    const boundaryIdx = [];
+    for (let i = 0; i <= DOMINANCE_SECTORS; i++) {
+      const target = (i / DOMINANCE_SECTORS) * gpsTotal;
+      let lo = 0, hi = refPath.length - 1;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (refPath[mid].dist < target) lo = mid + 1; else hi = mid;
+      }
+      boundaryIdx.push(lo);
+    }
+
+    const sectors = [];
+    for (let i = 0; i < DOMINANCE_SECTORS; i++) {
+      const f0 = i / DOMINANCE_SECTORS, f1 = (i + 1) / DOMINANCE_SECTORS;
+      let fastest = null, bestTime = Infinity;
+      for (const num of selNums) {
+        const total = telWithDist[num].at(-1).dist;
+        const segTime = interpElapsed(telWithDist[num], f1 * total) - interpElapsed(telWithDist[num], f0 * total);
+        if (segTime < bestTime) { bestTime = segTime; fastest = num; }
+      }
+      const points = refPath.slice(boundaryIdx[i], boundaryIdx[i + 1] + 1);
+      if (points.length > 1 && fastest != null) sectors.push({ points, fastest });
+    }
+    if (!sectors.length) return null;
+
+    const stats = selNums.map(num => ({
+      num,
+      pct: Math.round((100 * sectors.filter(s => s.fastest === num).length) / sectors.length),
+    }));
+
+    return { sectors, stats, refNum };
+  }, [activeTab, selected, telWithDist, locData, fastestLaps]);
+
   // ── Render ──
   const subtitle = qualSession
     ? `${qualSession.location ?? ''} · ${qualSession.year ?? ''} · Qualifying`
@@ -762,8 +845,43 @@ export default function QualifyingTelemetryPanel({ sessionType = 'Race', session
             </p>
           )}
 
+          {/* Track Dominance: which driver was fastest through each mini-sector */}
+          {activeTab === 'Track Dominance' && trackDominance && (
+            <div style={{ marginTop: '0.75rem' }}>
+              <DominanceMap
+                sectors={trackDominance.sectors}
+                colorFor={num => DRIVER_COLORS[selected.indexOf(num)] ?? '#888'}
+              />
+              <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '1.25rem', marginTop: 8 }}>
+                {trackDominance.stats.map(({ num, pct }) => {
+                  const drv = drivers.find(d => d.driver_number === num);
+                  return (
+                    <span key={num} style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <span style={{ width: 10, height: 10, borderRadius: 2, background: DRIVER_COLORS[selected.indexOf(num)], display: 'inline-block' }} />
+                      <strong style={{ color: DRIVER_COLORS[selected.indexOf(num)] }}>{drv?.name_acronym ?? num}</strong>
+                      <span style={{ color: '#888' }}>{pct}% of the lap</span>
+                    </span>
+                  );
+                })}
+              </div>
+              <p className="f1-footnote" style={{ marginTop: '0.5rem' }}>
+                Each of {DOMINANCE_SECTORS} equal-length mini-sectors is coloured by the driver who covered it in the
+                least time on their fastest qualifying lap. Track outline from{' '}
+                {drivers.find(d => d.driver_number === trackDominance.refNum)?.name_acronym ?? trackDominance.refNum}'s GPS trace.
+              </p>
+            </div>
+          )}
+
+          {activeTab === 'Track Dominance' && !anyTelLoading && !trackDominance && selected.length > 0 && (
+            <p className="f1-hint" style={{ padding: '1rem', textAlign: 'center' }}>
+              {selected.length < 2
+                ? 'Select at least two drivers to compare track dominance.'
+                : 'No telemetry/GPS data available to build the track dominance map.'}
+            </p>
+          )}
+
           {/* Chart — shown as soon as any driver's telemetry is available */}
-          {activeTab !== 'Sectors' && activeTab !== 'Straights & Corners' && chartData.length > 0 && (
+          {activeTab !== 'Sectors' && activeTab !== 'Straights & Corners' && activeTab !== 'Track Dominance' && chartData.length > 0 && (
             <ResponsiveContainer width="100%" height={260}>
               <LineChart data={chartData} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" />
@@ -812,7 +930,7 @@ export default function QualifyingTelemetryPanel({ sessionType = 'Race', session
             </ResponsiveContainer>
           )}
 
-          {activeTab !== 'Sectors' && activeTab !== 'Straights & Corners' && !anyTelLoading && chartData.length === 0 && selected.length > 0 && (
+          {activeTab !== 'Sectors' && activeTab !== 'Straights & Corners' && activeTab !== 'Track Dominance' && !anyTelLoading && chartData.length === 0 && selected.length > 0 && (
             <div style={{ padding: '1rem', textAlign: 'center' }}>
               {Object.values(telError).length > 0 ? (
                 <p className="f1-hint">

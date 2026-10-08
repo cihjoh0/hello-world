@@ -149,10 +149,11 @@ export async function getPositions(sessionKey) {
   return listGet('/position', { session_key: sessionKey });
 }
 
-// Qualifying session for a given meeting (same race weekend).
+// Main Qualifying session for a given meeting (same race weekend). Sprint
+// Qualifying / Sprint Shootout share session_type "Qualifying", so exclude by name.
 export async function getQualifyingSession(meetingKey) {
   const data = await listGet('/sessions', { meeting_key: meetingKey, session_type: 'Qualifying' });
-  return data[0] ?? null;
+  return data.find(s => !/sprint/i.test(s.session_name ?? '')) ?? null;
 }
 
 // All sessions for a given meeting (practice, qualifying, race, sprint, etc.).

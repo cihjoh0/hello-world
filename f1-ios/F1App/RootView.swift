@@ -15,6 +15,12 @@ struct RootView: View {
                     .tabItem { Label("Pit Stops", systemImage: "wrench.and.screwdriver") }
                 NavigationStack { RaceControlView(sessionKey: store.sessionKey) }
                     .tabItem { Label("Race Control", systemImage: "flag.checkered") }
+                NavigationStack { TeamRadioView(sessionKey: store.sessionKey) }
+                    .tabItem { Label("Radio", systemImage: "waveform") }
+                NavigationStack { QualifyingView(meetingKey: store.selectedRound?.meetingKey) }
+                    .tabItem { Label("Qualifying", systemImage: "timer") }
+                NavigationStack { InsightsView(round: store.selectedRound, year: store.year) }
+                    .tabItem { Label("Insights", systemImage: "chart.bar.xaxis") }
             }
         }
         .task(id: store.year) { await store.loadRounds() }

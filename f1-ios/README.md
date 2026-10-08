@@ -28,6 +28,8 @@ a simulator.
 | `Rounds.swift` | Race weekends; classifies Sprint vs Race by `session_name` (OpenF1 files the Sprint under `session_type` "Race") |
 | `Telemetry.swift`, `Zones.swift` | Speed→distance integration, interpolation, straight/corner zones, pit-stop box (stationary) time |
 | `TrackDominance.swift` | Per-mini-sector fastest driver |
+| `Qualifying.swift`, `TeamRadio.swift` | Main-qualifying selection (Sprint Qualifying excluded), fastest laps, radio clip annotation |
+| `OvertakeStats.swift`, `Aggregation.swift` | Circuit summary (median/mean advantage, histogram), season leaderboard, multi-race fetching |
 
 ## Running it
 
@@ -37,12 +39,13 @@ a simulator.
 4. Delete the template `App`/`ContentView` files and drag in everything from `F1App/`.
 5. Build and run.
 
-## What's in the app vs. only in `F1Core`
+## What's in the app
 
-In the app: Overtakes, Gap-to-leader chart (with Safety Car / VSC bands), Pit Stops
-(with on-demand box time), Race Control feed.
+Overtakes, Gap-to-leader chart (with Safety Car / VSC bands), Pit Stops (with
+on-demand box time), Race Control feed, Team Radio (playback + driver filter),
+Qualifying (straights-vs-corners zones and track dominance map, telemetry loaded
+lazily per driver), and Insights (circuit overtake history and season
+leaderboard, aggregated across races with progress and per-race failure
+tolerance).
 
-In `F1Core` with tests but **no UI yet**: straights-vs-corners zones, track
-dominance, GPS path helpers. Not ported at all: team radio playback, weekend
-pace, qualifying telemetry charts, circuit overtake history, season leaderboard,
-storylines, the FastF1 panel.
+Not ported: weekend pace, storylines, the FastF1 panel.
